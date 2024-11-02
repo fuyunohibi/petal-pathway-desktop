@@ -50,14 +50,17 @@ class MenuBar(ttk.LabelFrame):# buttons for startPoint,endPoint,wall
         print(self.selected_algo.get())
 
     def call_start_algo(self):
-        pathfinding_visaul.grid.start_algo(self.selected_algo.get())
+        pathfinding_visual.grid.start_algo(self.selected_algo.get())
 
     def call_clear_grid(self):
-        pathfinding_visaul.grid.clear_grid()
+        pathfinding_visual.grid.clear_grid()
+
+    def call_clear_grid(self):
+        pathfinding_visual.grid.clear_grid()
     
     def call_generate_maze(self):
-        pathfinding_visaul.grid.make_all_wall()
-        pathfinding_visaul.grid.generate_maze(0,0)
+        pathfinding_visual.grid.make_all_wall()
+        pathfinding_visual.grid.generate_maze(0,0)
 
 
 class Cell():
@@ -92,15 +95,18 @@ class Cell():
         self.draw()
     def is_dest(self):
         return self.dest
-    def make_wall(self):
-        """"mark as wall/obstacle(cannot pass)"""
-        self.color = 'green'
-        self.draw()
+
     def is_wall(self):
         return self.color == 'green'
+    def make_wall(self):
+        """Mark as wall/obstacle (cannot pass)."""
+        self.color = 'green'
+        self.draw()
+
     def make_empty(self):
         self.color = 'white'
         self.draw()
+
     def is_empty(self):
         return self.color == 'white'
     def make_visited(self):
@@ -120,8 +126,8 @@ class Cell():
         return self.color == 'magenta'
 
     def draw(self):
-        """ order to the cell to draw its representation on the canvas """
-        if self.master != None :
+        """Order to the cell to draw its representation on the canvas."""
+        if self.master is not None:
             fill = self.color
             outline = 'black'
             xmin = self.abs * self.size
@@ -129,12 +135,14 @@ class Cell():
             ymin = self.ord * self.size
             ymax = ymin + self.size
 
-            self.master.create_rectangle(xmin, ymin, xmax, ymax, fill = fill, outline = outline)
+            self.master.create_rectangle(xmin, ymin, xmax, ymax, fill=fill, outline=outline)
+
+
 
 
 class CellGrid(tkinter.Canvas):
-    def __init__(self,master, rowNumber, columnNumber, cellSize, *args, **kwargs):
-        tkinter.Canvas.__init__(self, master, width = cellSize * columnNumber , height = cellSize * rowNumber, *args, **kwargs)
+    def __init__(self, master, rowNumber, columnNumber, cellSize, *args, **kwargs):
+        super().__init__(master, width=cellSize * columnNumber, height=cellSize * rowNumber, *args, **kwargs)
         self.rowNumber = rowNumber
         self.columnNumber = columnNumber
         self.cellSize = cellSize
@@ -144,11 +152,11 @@ class CellGrid(tkinter.Canvas):
         self.start = []
         self.dest = []
         for row in range(rowNumber):
-
             line = []
             for column in range(columnNumber):
-                line.append(Cell(self, column, row, cellSize))
-
+                cell = Cell(self, column, row, cellSize)
+                cell.make_empty()  # Ensure all cells start as empty
+                line.append(cell)
             self.grid.append(line)
 
         #memorize the cells that have been modified to avoid many switching of state during mouse motion.
@@ -227,25 +235,38 @@ class CellGrid(tkinter.Canvas):
             for cell in row:
                 cell.make_wall()
 
-    def generate_maze(self,x,y):
-        self.grid[y][x].make_empty()
-        directions = [[1,0],[-1,0],[0,1],[0,-1]]
-        random.shuffle(directions)
+    def generate_maze_in_prolog(prolog, start_x, start_y, rows, columns):
+        # Clear any previous maze data in Prolog
+        prolog.retractall('grid_size(_, _)')
+        prolog.retractall('path(_, _)')
+        prolog.retractall('wall(_, _)')
 
-        while len(directions) > 0:
-            direction = directions.pop()
-            newx = x + direction[0] *2
-            newy = y + direction[1] *2
+        # Set grid size in Prolog
+        prolog.assertz(f"grid_size({columns}, {rows})")
 
-            if (newx<self.columnNumber and newx >= 0) and(newy >= 0 and newy <self.rowNumber) and self.grid[newy][newx].is_wall():
-                link_x = direction[0] + x
-                link_y = direction[1] + y
-                self.grid[link_y][link_x].make_empty()
-                app.update_idletasks()
-                time.sleep(0.0005)
-                self.generate_maze(newx,newy)
-        
-        return
+        # Initialize the maze with walls
+        prolog.query("initialize_maze().")
+
+        try:
+            # Start maze generation from the specified starting point
+            print("Generating maze...")
+            prolog.query(f"generate_maze({start_x}, {start_y}).")
+            print("Maze generation completed.")
+
+            # Retrieve paths from Prolog and update Python's grid representation
+            maze_grid = [['#' for _ in range(columns)] for _ in range(rows)]  # Initialize as all walls
+
+            # Retrieve all path cells from Prolog
+            for path in prolog.query("path(X, Y)."):
+                x, y = path["X"], path["Y"]
+                maze_grid[y][x] = ' '  # Mark the cell as a path (empty)
+
+            return maze_grid
+
+        except Exception as e:
+            print(f"Error during Prolog maze generation: {e}")
+            return None
+
 
     def start_algo(self, algo):
         if self.choose_start and self.choose_dest:
@@ -495,19 +516,19 @@ def run_time():
     # print("time running : {:.2f} s".format(time.time()-start_time))
     app.after(5000,run_time)
 
-if __name__ == "__main__" :
+if __name__ == "__main__":
     # Initialize Prolog engine
     prolog = Prolog()
-        # Get the current script directory and consult bfs.pl
-    prolog_dir = os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl')  # Adjust this path as needed
     try:
-        # Consult the bfs.pl file
-        prolog.consult(prolog_dir)
-        print("Prolog file consulted successfully.")
+        # Consult the bfs.pl and maze_logic.pl files
+        prolog.consult(os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl'))
+        prolog.consult(os.path.join(os.path.dirname(__file__), '../prolog/maze_logic.pl'))
+        print("Prolog files consulted successfully.")
     except Exception as e:
         print(f"Error consulting Prolog file: {e}")
-    app = ThemedTk(theme= 'arc')
-    pathfinding_visaul = MainPage(app)
+
+    app = ThemedTk(theme='arc')
+    pathfinding_visual = MainPage(app)
     app.title('Pathfinding Algorithm Visualizer')
-    app.after(0,run_time)
+    app.after(0, run_time)
     app.mainloop()
