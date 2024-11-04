@@ -331,87 +331,114 @@ class CellGrid(tkinter.Canvas):
             curr = prev
         return count
 
-
     def bfs(self):
         self.clear_prev_algo()
         self.unbind_click()
-        discovered = 0
+        
+        start = f"cell({self.start[1]}, {self.start[0]})"
+        destination = f"cell({self.dest[1]}, {self.dest[0]})"
 
-        que = deque()
-        que.append(self.grid[self.start[0]][self.start[1]])
-        visited = {que[0]}
-        while len(que) > 0:
-            cell = que.popleft()
-            discovered += 1
+        # Ensure Prolog has the grid and wall data
+        prolog.retractall('grid_size(_, _)')
+        prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
 
-            # Use Prolog to check if the current cell is the destination
-            query = f"is_destination(cell({cell.ord}, {cell.abs}), cell({self.dest[0]}, {self.dest[1]}))"
-            if list(self.prolog.query(query)):
-                # Destination found
-                steps = self.show_path(cell)
-                self.grid[self.start[0]][self.start[1]].make_start()
-                self.grid[self.dest[0]][self.dest[1]].make_dest()
-                messagebox.showinfo("path found", f"Cells Discovered: {discovered}\nDistance to destination: {steps}")
-                return
+        prolog.retractall('wall(_, _)')
+        for row in self.grid:
+            for cell in row:
+                if cell.is_wall():
+                    x, y = cell.abs, cell.ord
+                    prolog.assertz(f"wall({x}, {y})")
 
-            # Get unvisited neighbors from Prolog
-            neighbors_query = f"unvisited_neighbors(cell({cell.ord}, {cell.abs}), [{', '.join(f'cell({v.ord}, {v.abs})' for v in visited)}], UnvisitedNeighbors)"
-            neighbors_result = list(self.prolog.query(neighbors_query))
+        # Initialize BFS loop to process step-by-step visualization
+        solution_found = False
+        queue = [[start]]  # Start the queue with the starting cell
 
-            if neighbors_result:
-                for neighbor_cell in neighbors_result[0]['UnvisitedNeighbors']:
-                    # Use regex to extract X and Y from cell(X, Y) format
-                    match = re.match(r"cell\((\d+),\s*(\d+)\)", neighbor_cell)
+        while not solution_found:
+            # Prolog query for each BFS step
+            query = f"bfs_step({start}, {destination}, Path, Visited, ToVisit)"
+            result = list(self.prolog.query(query))
+            print(result)
+
+            if result:
+                result = result[0]
+
+                # Display each cell in ToVisit
+                to_visit = result.get('ToVisit', [])
+                for cell_str in to_visit:
+                    match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
                     if match:
-                        neighbor_x, neighbor_y = int(match.group(1)), int(match.group(2))
-                        neighbor = self.grid[neighbor_x][neighbor_y]
+                        x, y = int(match.group(1)), int(match.group(2))
+                        cell = self.grid[y][x]
+                        if not cell.is_start() and not cell.is_dest():
+                            cell.make_to_visit()
+                            app.update_idletasks()
+                            time.sleep(0.01)  # Short delay for visualization
 
-                        if neighbor not in visited:
-                            neighbor.prev = cell
-                            que.append(neighbor)
-                            visited.add(neighbor)
-                            neighbor.make_to_visit()
-            
-            if not cell.is_start():
-                cell.make_visited()
-                self.update_idletasks()
-                time.sleep(0.001)
+                # Display each cell in Visited
+                visited = result.get('Visited', [])
+                for cell_str in visited:
+                    match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
+                    if match:
+                        x, y = int(match.group(1)), int(match.group(2))
+                        cell = self.grid[y][x]
+                        if not cell.is_start() and not cell.is_dest():
+                            cell.make_visited()
+                            app.update_idletasks()
+                            time.sleep(0.01)  # Short delay for visualization
 
-        messagebox.showinfo("Path not found", "No solution")
+                # Check if the final Path is found (destination reached)
+                path = result.get('Path', [])
+                if path:
+                    # Visualize the found path step-by-step
+                    for cell_str in path:
+                        match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
+                        if match:
+                            x, y = int(match.group(1)), int(match.group(2))
+                            cell = self.grid[y][x]
+                            if not cell.is_start() and not cell.is_dest():
+                                cell.make_path()
+                                app.update_idletasks()
+                                time.sleep(0.05)  # Longer delay for path visualization
+                    solution_found = True
+                    messagebox.showinfo("Path Found", f"Cells Discovered: {len(visited)}\nDistance to destination: {len(path)-1}")
+                    break
+            else:
+                messagebox.showinfo("Path Not Found", "No solution")
+                break
 
     def dfs(self):
-        self.clear_prev_algo()
-        self.unbind_click()
-        discovered = 0
+            self.clear_prev_algo()
+            self.unbind_click()
+            discovered = 0
 
-        que = deque()
-        que.append(self.grid[self.start[0]][self.start[1]])
-        visited = {que[0]}
-        while(len(que) > 0):
-            cell = que.pop()
-            discovered += 1
-            cell.draw()
-            if cell.ord == self.dest[0] and cell.abs == self.dest[1]:
-                steps = self.show_path(cell)
-                self.grid[self.start[0]][self.start[1]].make_start()
-                self.grid[self.dest[0]][self.dest[1]].make_dest()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                
-                return
+            que = deque()
+            que.append(self.grid[self.start[0]][self.start[1]])
+            visited = {que[0]}
+            while(len(que) > 0):
+                cell = que.pop()
+                discovered += 1
+                cell.draw()
+                if cell.ord == self.dest[0] and cell.abs == self.dest[1]:
+                    steps = self.show_path(cell)
+                    self.grid[self.start[0]][self.start[1]].make_start()
+                    self.grid[self.dest[0]][self.dest[1]].make_dest()
+                    messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
+                    
+                    return
 
-            for neighbor in cell.neighbors:
-                if neighbor in visited:
-                    continue
-                else:
-                    neighbor.prev = cell
-                    que.append(neighbor)
-                    visited.add(neighbor)
-                    neighbor.make_to_visit()
-            if(not cell.is_start()):
-                cell.make_visited()
-                app.update_idletasks()
-                time.sleep(0.001)
-        messagebox.showinfo("Path not found","No solution")
+                for neighbor in cell.neighbors:
+                    if neighbor in visited:
+                        continue
+                    else:
+                        neighbor.prev = cell
+                        que.append(neighbor)
+                        visited.add(neighbor)
+                        neighbor.make_to_visit()
+                if(not cell.is_start()):
+                    cell.make_visited()
+                    app.update_idletasks()
+                    time.sleep(0.001)
+            messagebox.showinfo("Path not found","No solution")
 
 
     def get_manhattan(self,cell1,cell2):
