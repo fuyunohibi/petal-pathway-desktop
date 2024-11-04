@@ -40,7 +40,6 @@ dijkstra_loop(StartX, StartY, EndX, EndY, Path, VisitedCells) :-
     % Continue until the queue is empty or destination is reached
     findall((Dist, X, Y), (in_queue(X, Y), distance(X, Y, Dist)), Queue),
     Queue \= [],
-    min_distance_cell(Queue, (MinDist, CurrentX, CurrentY)),
 
     % Remove the current cell from the queue and mark it as visited
     retract(in_queue(CurrentX, CurrentY)),

@@ -464,61 +464,67 @@ class CellGrid(tkinter.Canvas):
     #             if currentCell != startCell:
     #                 currentCell.make_visited()
     #         messagebox.showinfo("Path not found","No solution")
+    
+    
     def dijkstra(self):
         self.unbind_click()
         self.clear_prev_algo()
         discovered = 0
-        
+
         try:
             # Get start and destination cells
             start_cell = self.grid[self.start[0]][self.start[1]]
             dest_cell = self.grid[self.dest[0]][self.dest[1]]
-            
+
             # Convert to Prolog coordinates
             start_pos = f"({start_cell.abs}, {start_cell.ord})"
             dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
-            
+
             # Reset Prolog knowledge base
             prolog.retractall('grid_size(_, _)')
             prolog.retractall('wall(_, _)')
             prolog.retractall('visited(_, _)')
             prolog.retractall('to_visit(_, _)')
-            
+
             # Set grid dimensions in Prolog
             prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
-            
+
             # Add walls to Prolog database
             for row in self.grid:
                 for cell in row:
                     if cell.is_wall():
                         prolog.assertz(f"wall({cell.abs}, {cell.ord})")
-            
+
             # Run Dijkstra's algorithm in Prolog with visualization feedback
             query = f"dijkstra_with_visualization({start_pos}, {dest_pos}, Path, VisitedCells, 30)."
             
-            # Execute query and get results
+            # Execute query and retrieve results progressively
             results = list(prolog.query(query))
             
             if results:  # Path found
                 result = results[0]
                 path = result['Path']
                 visited_cells = result['VisitedCells']
-                
-                # Visualize visited cells
+
+                # Process each cell in VisitedCells
                 for cell_pos in visited_cells:
                     pos_str = str(cell_pos).strip("'\" ,")
                     coords = re.findall(r'\d+', pos_str)
                     if len(coords) >= 2:
                         x, y = int(coords[0]), int(coords[1])
                         cell = self.grid[y][x]
+
                         if not cell.is_start() and not cell.is_dest():
+                            # Mark cell as to be visited (pink)
                             cell.make_to_visit()
                             app.update_idletasks()
-                            time.sleep(0.001)
+                            time.sleep(0.01)
+                            
+                            # Mark cell as visited (orange)
                             cell.make_visited()
-                    discovered += 1
-                
-                # Visualize path
+                        discovered += 1
+
+                # Visualize final path
                 prev_cell = start_cell
                 for cell_pos in path:
                     pos_str = str(cell_pos).strip("'\" ,")
@@ -532,26 +538,27 @@ class CellGrid(tkinter.Canvas):
                         prev_cell = current_cell
                         app.update_idletasks()
                         time.sleep(0.01)
-                
+
                 # Show completion message
                 steps = len(path) - 1
                 messagebox.showinfo(
                     "Path found",
                     f"Cells Discovered: {discovered}\nDistance to destination: {steps}"
                 )
-                
+
             else:  # No path found
                 messagebox.showinfo("Path not found", "No solution exists")
-                
+
         except Exception as e:
             print(f"Error during Dijkstra's algorithm: {e}")
             messagebox.showerror("Error", f"Algorithm failed: {str(e)}")
-        
+
         finally:
             # Ensure start and end points are correctly marked
             self.grid[self.start[0]][self.start[1]].make_start()
             self.grid[self.dest[0]][self.dest[1]].make_dest()
-            
+
+        
 start_time = time.time()
 
 def run_time():
