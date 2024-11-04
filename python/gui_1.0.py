@@ -163,15 +163,6 @@ class CellGrid(tkinter.Canvas):
 
         self.draw()
 
-                # Initialize Prolog engine and consult bfs.pl
-        self.prolog = Prolog()
-        prolog_dir = os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl')
-        try:
-            self.prolog.consult(prolog_dir)
-            print("Prolog file consulted successfully.")
-        except Exception as e:
-            print(f"Error consulting Prolog file: {e}")
-
     def unbind_click(self):
         #unbind to disable clicking while running
         self.unbind("<Button-1>")  
@@ -193,16 +184,19 @@ class CellGrid(tkinter.Canvas):
         cell = self.grid[row][column]
         
         if not self.choose_start:
+            print("adding start", cell.ord, cell.abs)
             cell.make_start()
             self.start = [cell.ord,cell.abs]
             self.choose_start = True
         elif not self.choose_dest:
+            print("adding dest", cell.ord, cell.abs)
             cell.make_dest()
             self.dest = [cell.ord,cell.abs]
             self.choose_dest = True
 
         if(self.choose_start and self.choose_dest ):
             if not (cell.is_wall() or cell.is_start() or cell.is_dest() ):
+                print("adding wall", cell.ord, cell.abs) # cellord is row, cellabs is column
                 cell.make_wall()
             #add the cell to the list of cell switched during the click
             elif cell.is_wall():
@@ -253,21 +247,21 @@ class CellGrid(tkinter.Canvas):
         
         return
 
-    def start_algo(self,algo):
+    def start_algo(self, algo):
         if self.choose_start and self.choose_dest:
-            print("Started",algo)
-            print("start = [{}][{}] end = [{}][{}]".format(self.start[0],self.start[1],self.dest[0],self.dest[1]))
+            print("Started", algo)
+            print(f"start = [{self.start[0]}][{self.start[1]}] end = [{self.dest[0]}][{self.dest[1]}]")
             self.set_neighbors()
-            if(algo == "Breadth First Search"):
-                self.bfs()
-            elif algo =="Depth First Search":
+            if algo == "Breadth First Search":
+                threading.Thread(target=self.bfs).start()
+            elif algo == "Depth First Search":
                 self.dfs()
             elif algo == "A*(A-Star) Pathfinding":
                 self.a_star()
             elif algo == "Dijkstra's Shortest path Algorithm":
                 self.dijkstra()
         else:
-            messagebox.showerror("Error","Please choose start and destination point first!")
+            messagebox.showerror("Error", "Please choose start and destination point first!")
 
     def clear_grid(self):
         
@@ -337,81 +331,71 @@ class CellGrid(tkinter.Canvas):
         self.unbind_click()
         discovered = 0
 
-        que = deque()
-        que.append(self.grid[self.start[0]][self.start[1]])
-        visited = {que[0]}
-        while len(que) > 0:
-            cell = que.popleft()
-            discovered += 1
+        try:
+            # Prolog interaction setup
+            start_cell = self.grid[self.start[0]][self.start[1]]
+            dest_cell = self.grid[self.dest[0]][self.dest[1]]
 
-            # Use Prolog to check if the current cell is the destination
-            query = f"is_destination(cell({cell.ord}, {cell.abs}), cell({self.dest[0]}, {self.dest[1]}))"
-            if list(self.prolog.query(query)):
-                # Destination found
-                steps = self.show_path(cell)
-                self.grid[self.start[0]][self.start[1]].make_start()
-                self.grid[self.dest[0]][self.dest[1]].make_dest()
-                messagebox.showinfo("path found", f"Cells Discovered: {discovered}\nDistance to destination: {steps}")
-                return
+            start_pos = f"({start_cell.abs}, {start_cell.ord})"
+            dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
 
-            # Get unvisited neighbors from Prolog
-            neighbors_query = f"unvisited_neighbors(cell({cell.ord}, {cell.abs}), [{', '.join(f'cell({v.ord}, {v.abs})' for v in visited)}], UnvisitedNeighbors)"
-            neighbors_result = list(self.prolog.query(neighbors_query))
+            # Set grid size in Prolog
+            prolog.retractall('grid_size(_, _)')
+            prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
 
-            if neighbors_result:
-                for neighbor_cell in neighbors_result[0]['UnvisitedNeighbors']:
-                    # Use regex to extract X and Y from cell(X, Y) format
-                    match = re.match(r"cell\((\d+),\s*(\d+)\)", neighbor_cell)
-                    if match:
-                        neighbor_x, neighbor_y = int(match.group(1)), int(match.group(2))
-                        neighbor = self.grid[neighbor_x][neighbor_y]
+            # Remove any previous wall facts
+            prolog.retractall('wall(_, _)')
 
-                        if neighbor not in visited:
-                            neighbor.prev = cell
-                            que.append(neighbor)
-                            visited.add(neighbor)
-                            neighbor.make_to_visit()
-            
-            if not cell.is_start():
-                cell.make_visited()
-                self.update_idletasks()
-                time.sleep(0.001)
+            # Add walls to Prolog
+            for row in self.grid:
+                for cell in row:
+                    if cell.is_wall():
+                        x = cell.abs
+                        y = cell.ord
+                        prolog.assertz(f"wall({x}, {y})")
 
-        messagebox.showinfo("Path not found", "No solution")
+            print(f"Running Prolog query: bfs_with_timeout({start_pos}, {dest_pos}, Path, 20).")
 
-    def dfs(self):
-        self.clear_prev_algo()
-        self.unbind_click()
-        discovered = 0
+            query = f"bfs_with_timeout({start_pos}, {dest_pos}, Path, 20)."  # Timeout of 20 seconds
 
-        que = deque()
-        que.append(self.grid[self.start[0]][self.start[1]])
-        visited = {que[0]}
-        while(len(que) > 0):
-            cell = que.pop()
-            discovered += 1
-            cell.draw()
-            if cell.ord == self.dest[0] and cell.abs == self.dest[1]:
-                steps = self.show_path(cell)
-                self.grid[self.start[0]][self.start[1]].make_start()
-                self.grid[self.dest[0]][self.dest[1]].make_dest()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                
-                return
+            result = list(prolog.query(query))
 
-            for neighbor in cell.neighbors:
-                if neighbor in visited:
-                    continue
-                else:
-                    neighbor.prev = cell
-                    que.append(neighbor)
-                    visited.add(neighbor)
-                    neighbor.make_to_visit()
-            if(not cell.is_start()):
-                cell.make_visited()
-                app.update_idletasks()
-                time.sleep(0.001)
-        messagebox.showinfo("Path not found","No solution")
+            print(f"Prolog query result: {result}")
+
+            if result:
+                prolog_path = result[0]['Path']
+
+                for step in prolog_path:
+                    # Convert step to string and remove unwanted characters
+                    step_str = str(step).strip("'\" ,")
+                    print(f"Processing step: '{step_str}'")
+                    # Extract all numbers from the step
+                    nums = re.findall(r'\d+', step_str)
+                    if len(nums) >= 2:
+                        x = int(nums[0])
+                        y = int(nums[1])
+                        print(f"Extracted coordinates: x={x}, y={y}")
+                    else:
+                        print(f"Unexpected step format: '{step_str}'")
+                        continue
+
+                    cell = self.grid[y][x]
+                    if not cell.is_start() and not cell.is_dest():
+                        cell.make_path()
+                        app.update_idletasks()
+                        time.sleep(0.05)
+                messagebox.showinfo("Path Found", "A path was found!")
+            else:
+                messagebox.showinfo("Path Not Found", "No solution")
+
+        except Exception as e:
+            print(f"Error during Prolog query: {e}")
+            messagebox.showerror("Error", f"Prolog query failed: {e}")
+
+        self.grid[self.start[0]][self.start[1]].make_start()
+        self.grid[self.dest[0]][self.dest[1]].make_dest()
+
+
 
 
     def get_manhattan(self,cell1,cell2):
@@ -508,7 +492,7 @@ class CellGrid(tkinter.Canvas):
 start_time = time.time()
 
 def run_time():
-    print("time running : {:.2f} s".format(time.time()-start_time))
+    # print("time running : {:.2f} s".format(time.time()-start_time))
     app.after(5000,run_time)
 
 if __name__ == "__main__" :
