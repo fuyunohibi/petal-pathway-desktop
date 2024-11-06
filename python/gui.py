@@ -292,7 +292,7 @@ class CellGrid(tkinter.Canvas):
                 if 0 <= y < len(self.grid) and 0 <= x < len(self.grid[0]):
                     self.grid[y][x].make_empty()
                     app.update_idletasks()
-                    time.sleep(0.01)
+                    time.sleep(0.1)
 
             print("Maze generation visualization completed.")
             messagebox.showinfo("Success", "Maze generation completed successfully!")
