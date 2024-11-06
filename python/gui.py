@@ -231,38 +231,81 @@ class CellGrid(tkinter.Canvas):
         for row in self.grid:
             for cell in row:
                 cell.make_wall()
+                
+    # def generate_maze(self,x,y):
+    #     self.grid[y][x].make_empty()
+    #     directions = [[1,0],[-1,0],[0,1],[0,-1]]
+    #     random.shuffle(directions)
 
-    def generate_maze_in_prolog(prolog, start_x, start_y, rows, columns):
-        # Clear any previous maze data in Prolog
-        prolog.retractall('grid_size(_, _)')
-        prolog.retractall('path(_, _)')
-        prolog.retractall('wall(_, _)')
+    #     while len(directions) > 0:
+    #         direction = directions.pop()
+    #         newx = x + direction[0] *2
+    #         newy = y + direction[1] *2
 
-        # Set grid size in Prolog
-        prolog.assertz(f"grid_size({columns}, {rows})")
-
-        # Initialize the maze with walls
-        prolog.query("initialize_maze().")
+    #         if (newx<self.columnNumber and newx >= 0) and(newy >= 0 and newy <self.rowNumber) and self.grid[newy][newx].is_wall():
+    #             link_x = direction[0] + x
+    #             link_y = direction[1] + y
+    #             self.grid[link_y][link_x].make_empty()
+    #             app.update_idletasks()
+    #             time.sleep(0.0005)
+    #             self.generate_maze(newx,newy)
+        
+    #     return
+    
+    def generate_maze(self, start_x, start_y):
+        self.clear_grid()  # Clear the grid to start with a blank slate
 
         try:
-            # Start maze generation from the specified starting point
-            print("Generating maze...")
-            prolog.query(f"generate_maze({start_x}, {start_y}).")
-            print("Maze generation completed.")
+            # Set up Prolog by clearing existing facts
+            prolog.retractall('grid_size(_, _)')
+            prolog.retractall('wall(_, _)')
+            prolog.retractall('path(_, _)')
+            prolog.retractall('visited(_, _)')
 
-            # Retrieve paths from Prolog and update Python's grid representation
-            maze_grid = [['#' for _ in range(columns)] for _ in range(rows)]  # Initialize as all walls
+            # Define grid dimensions in Prolog
+            prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
 
-            # Retrieve all path cells from Prolog
-            for path in prolog.query("path(X, Y)."):
+            # Initialize maze generation in Prolog
+            print("Initializing maze...")
+            result = list(prolog.query(f"generate_maze({start_x}, {start_y})."))
+
+            if not result:
+                print("Maze generation in Prolog did not return any result.")
+                messagebox.showerror("Error", "Maze generation failed.")
+                return
+
+            print("Maze generation completed. Retrieving results...")
+
+            # First mark all cells as walls for a clear visualization
+            for row in self.grid:
+                for cell in row:
+                    cell.make_wall()
+                    app.update_idletasks()
+
+            # Retrieve paths from Prolog to visualize in Python
+            path_cells = list(prolog.query("path(X, Y)."))
+            print(f"Total paths generated: {len(path_cells)}")
+
+            # Display paths from Prolog results
+            for path in path_cells:
                 x, y = path["X"], path["Y"]
-                maze_grid[y][x] = ' '  # Mark the cell as a path (empty)
+                if 0 <= y < len(self.grid) and 0 <= x < len(self.grid[0]):
+                    self.grid[y][x].make_empty()
+                    app.update_idletasks()
+                    time.sleep(0.01)
 
-            return maze_grid
+            print("Maze generation visualization completed.")
+            messagebox.showinfo("Success", "Maze generation completed successfully!")
 
         except Exception as e:
             print(f"Error during Prolog maze generation: {e}")
-            return None
+            messagebox.showerror("Error", f"Prolog maze generation failed: {str(e)}")
+
+        finally:
+            # Clean up Prolog database
+            prolog.query("cleanup_maze.")
+
+
 
 
     def start_algo(self, algo):
