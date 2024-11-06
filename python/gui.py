@@ -50,14 +50,14 @@ class MenuBar(ttk.LabelFrame):# buttons for startPoint,endPoint,wall
         print(self.selected_algo.get())
 
     def call_start_algo(self):
-        pathfinding_visaul.grid.start_algo(self.selected_algo.get())
+        pathfinding_visual.grid.start_algo(self.selected_algo.get())
 
     def call_clear_grid(self):
-        pathfinding_visaul.grid.clear_grid()
+        pathfinding_visual.grid.clear_grid()
     
     def call_generate_maze(self):
-        pathfinding_visaul.grid.make_all_wall()
-        pathfinding_visaul.grid.generate_maze(0,0)
+        pathfinding_visual.grid.make_all_wall()
+        pathfinding_visual.grid.generate_maze(0,0)
 
 
 class Cell():
@@ -92,15 +92,18 @@ class Cell():
         self.draw()
     def is_dest(self):
         return self.dest
-    def make_wall(self):
-        """"mark as wall/obstacle(cannot pass)"""
-        self.color = 'green'
-        self.draw()
+
     def is_wall(self):
         return self.color == 'green'
+    def make_wall(self):
+        """Mark as wall/obstacle (cannot pass)."""
+        self.color = 'green'
+        self.draw()
+
     def make_empty(self):
         self.color = 'white'
         self.draw()
+
     def is_empty(self):
         return self.color == 'white'
     def make_visited(self):
@@ -120,8 +123,8 @@ class Cell():
         return self.color == 'magenta'
 
     def draw(self):
-        """ order to the cell to draw its representation on the canvas """
-        if self.master != None :
+        """Order to the cell to draw its representation on the canvas."""
+        if self.master is not None:
             fill = self.color
             outline = 'black'
             xmin = self.abs * self.size
@@ -129,12 +132,14 @@ class Cell():
             ymin = self.ord * self.size
             ymax = ymin + self.size
 
-            self.master.create_rectangle(xmin, ymin, xmax, ymax, fill = fill, outline = outline)
+            self.master.create_rectangle(xmin, ymin, xmax, ymax, fill=fill, outline=outline)
+
+
 
 
 class CellGrid(tkinter.Canvas):
-    def __init__(self,master, rowNumber, columnNumber, cellSize, *args, **kwargs):
-        tkinter.Canvas.__init__(self, master, width = cellSize * columnNumber , height = cellSize * rowNumber, *args, **kwargs)
+    def __init__(self, master, rowNumber, columnNumber, cellSize, *args, **kwargs):
+        super().__init__(master, width=cellSize * columnNumber, height=cellSize * rowNumber, *args, **kwargs)
         self.rowNumber = rowNumber
         self.columnNumber = columnNumber
         self.cellSize = cellSize
@@ -144,11 +149,11 @@ class CellGrid(tkinter.Canvas):
         self.start = []
         self.dest = []
         for row in range(rowNumber):
-
             line = []
             for column in range(columnNumber):
-                line.append(Cell(self, column, row, cellSize))
-
+                cell = Cell(self, column, row, cellSize)
+                cell.make_empty()  # Ensure all cells start as empty
+                line.append(cell)
             self.grid.append(line)
 
         #memorize the cells that have been modified to avoid many switching of state during mouse motion.
@@ -226,26 +231,82 @@ class CellGrid(tkinter.Canvas):
         for row in self.grid:
             for cell in row:
                 cell.make_wall()
+                
+    # def generate_maze(self,x,y):
+    #     self.grid[y][x].make_empty()
+    #     directions = [[1,0],[-1,0],[0,1],[0,-1]]
+    #     random.shuffle(directions)
 
-    def generate_maze(self,x,y):
-        self.grid[y][x].make_empty()
-        directions = [[1,0],[-1,0],[0,1],[0,-1]]
-        random.shuffle(directions)
+    #     while len(directions) > 0:
+    #         direction = directions.pop()
+    #         newx = x + direction[0] *2
+    #         newy = y + direction[1] *2
 
-        while len(directions) > 0:
-            direction = directions.pop()
-            newx = x + direction[0] *2
-            newy = y + direction[1] *2
-
-            if (newx<self.columnNumber and newx >= 0) and(newy >= 0 and newy <self.rowNumber) and self.grid[newy][newx].is_wall():
-                link_x = direction[0] + x
-                link_y = direction[1] + y
-                self.grid[link_y][link_x].make_empty()
-                app.update_idletasks()
-                time.sleep(0.0005)
-                self.generate_maze(newx,newy)
+    #         if (newx<self.columnNumber and newx >= 0) and(newy >= 0 and newy <self.rowNumber) and self.grid[newy][newx].is_wall():
+    #             link_x = direction[0] + x
+    #             link_y = direction[1] + y
+    #             self.grid[link_y][link_x].make_empty()
+    #             app.update_idletasks()
+    #             time.sleep(0.0005)
+    #             self.generate_maze(newx,newy)
         
-        return
+    #     return
+    
+    def generate_maze(self, start_x, start_y):
+        self.clear_grid()  # Clear the grid to start with a blank slate
+
+        try:
+            # Set up Prolog by clearing existing facts
+            prolog.retractall('grid_size(_, _)')
+            prolog.retractall('wall(_, _)')
+            prolog.retractall('path(_, _)')
+            prolog.retractall('visited(_, _)')
+
+            # Define grid dimensions in Prolog
+            prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+
+            # Initialize maze generation in Prolog
+            print("Initializing maze...")
+            result = list(prolog.query(f"generate_maze({start_x}, {start_y})."))
+
+            if not result:
+                print("Maze generation in Prolog did not return any result.")
+                messagebox.showerror("Error", "Maze generation failed.")
+                return
+
+            print("Maze generation completed. Retrieving results...")
+
+            # First mark all cells as walls for a clear visualization
+            for row in self.grid:
+                for cell in row:
+                    cell.make_wall()
+                    app.update_idletasks()
+
+            # Retrieve paths from Prolog to visualize in Python
+            path_cells = list(prolog.query("path(X, Y)."))
+            print(f"Total paths generated: {len(path_cells)}")
+
+            # Display paths from Prolog results
+            for path in path_cells:
+                x, y = path["X"], path["Y"]
+                if 0 <= y < len(self.grid) and 0 <= x < len(self.grid[0]):
+                    self.grid[y][x].make_empty()
+                    app.update_idletasks()
+                    time.sleep(0.1)
+
+            print("Maze generation visualization completed.")
+            messagebox.showinfo("Success", "Maze generation completed successfully!")
+
+        except Exception as e:
+            print(f"Error during Prolog maze generation: {e}")
+            messagebox.showerror("Error", f"Prolog maze generation failed: {str(e)}")
+
+        finally:
+            # Clean up Prolog database
+            prolog.query("cleanup_maze.")
+
+
+
 
     def start_algo(self, algo):
         if self.choose_start and self.choose_dest:
@@ -403,111 +464,166 @@ class CellGrid(tkinter.Canvas):
         x2,y2 = cell2.abs,cell2.ord
         return abs(x1-x2) + abs(y1-y2)
 
-    def a_star(self):
-        self.unbind_click()
-        self.clear_prev_algo()
-        discovered = 0
-        count = 0
-        startCell = self.grid[self.start[0]][self.start[1]]
-        destCell = self.grid[self.dest[0]][self.dest[1]]
-        que = PriorityQueue()
-        que.put((0,count,startCell))
 
-        track = {startCell}#keep track of cells in que
 
-        startCell.g = 0
-        startCell.f = self.get_manhattan(startCell,destCell)
+    # def dijkstra(self):
+    #         self.unbind_click()
+    #         self.clear_prev_algo()
+    #         discovered = 0
 
-        while not que.empty():
-            discovered += 1
-            currentCell = que.get()[2]
-            track.remove(currentCell)
-            if currentCell == destCell:
-                steps = self.show_path(destCell)
-                destCell.make_dest()
-                startCell.make_start()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                return
+    #         que = PriorityQueue()
+    #         count = 0 #used as tiebreaker for priority queue -> if distance is equal, whatever comes in the que first goes first
+    #         startCell = self.grid[self.start[0]][self.start[1]]
+    #         destCell = self.grid[self.dest[0]][self.dest[1]]
+    #         startCell.d = 0 #distance from start to itself = 0
+    #         track = {startCell} #keep track of cell in que
             
-            for neighbor in currentCell.neighbors:
-                tmp = currentCell.g +1
+    #         que.put((0,0,startCell))
 
-                if tmp < neighbor.g:
-                    neighbor.prev = currentCell
-                    neighbor.g = tmp
-                    neighbor.f = tmp + self.get_manhattan(neighbor,destCell)
+    #         while not que.empty():
+    #             discovered +=1 
+    #             currentCell = que.get()[2] #get closest cell
+    #             track.remove(currentCell)
+    #             if currentCell == destCell:
+    #                 steps = self.show_path(currentCell)
+    #                 destCell.make_dest()
+    #                 startCell.make_start()
+    #                 messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
+    #                 return
+    #             for neighbor in currentCell.neighbors:
+    #                 """"compare between current + 1 and neighbor's distance"""
+    #                 min_distance = min(neighbor.d,currentCell.d+1)
+    #                 if min_distance != neighbor.d:
+    #                     neighbor.d = min_distance
+    #                     neighbor.prev = currentCell
 
-                    if neighbor not in track:
-                        count+=1
-                        que.put((neighbor.f,count,neighbor))
-                        track.add(neighbor)
-                        neighbor.make_to_visit()
-                app.update_idletasks()
-                time.sleep(0.001)
-            if currentCell != startCell:
-                currentCell.make_visited()
-        messagebox.showinfo("Path not found","No solution")
-
+    #                     if neighbor not in track:
+    #                         count += 1
+    #                         que.put((neighbor.d,count,neighbor))
+    #                         track.add(neighbor)
+    #                         neighbor.make_to_visit()
+    #                 app.update_idletasks()
+    #                 time.sleep(0.001)
+    #             if currentCell != startCell:
+    #                 currentCell.make_visited()
+    #         messagebox.showinfo("Path not found","No solution")
+    
+    
     def dijkstra(self):
         self.unbind_click()
         self.clear_prev_algo()
         discovered = 0
 
-        que = PriorityQueue()
-        count = 0 #used as tiebreaker for priority queue -> if distance is equal, whatever comes in the que first goes first
-        startCell = self.grid[self.start[0]][self.start[1]]
-        destCell = self.grid[self.dest[0]][self.dest[1]]
-        startCell.d = 0 #distance from start to itself = 0
-        track = {startCell} #keep track of cell in que
-         
-        que.put((0,0,startCell))
+        try:
+            # Get start and destination cells
+            start_cell = self.grid[self.start[0]][self.start[1]]
+            dest_cell = self.grid[self.dest[0]][self.dest[1]]
 
-        while not que.empty():
-            discovered +=1 
-            currentCell = que.get()[2] #get closest cell
-            track.remove(currentCell)
-            if currentCell == destCell:
-                steps = self.show_path(currentCell)
-                destCell.make_dest()
-                startCell.make_start()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                return
-            for neighbor in currentCell.neighbors:
-                """"compare between current + 1 and neighbor's distance"""
-                min_distance = min(neighbor.d,currentCell.d+1)
-                if min_distance != neighbor.d:
-                    neighbor.d = min_distance
-                    neighbor.prev = currentCell
+            # Convert to Prolog coordinates
+            start_pos = f"({start_cell.abs}, {start_cell.ord})"
+            dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
 
-                    if neighbor not in track:
-                        count += 1
-                        que.put((neighbor.d,count,neighbor))
-                        track.add(neighbor)
-                        neighbor.make_to_visit()
-                app.update_idletasks()
-                time.sleep(0.001)
-            if currentCell != startCell:
-                currentCell.make_visited()
-        messagebox.showinfo("Path not found","No solution")
+            # Reset Prolog knowledge base
+            prolog.retractall('grid_size(_, _)')
+            prolog.retractall('wall(_, _)')
+            prolog.retractall('visited(_, _)')
+            prolog.retractall('to_visit(_, _)')
+
+            # Set grid dimensions in Prolog
+            prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+
+            # Add walls to Prolog database
+            for row in self.grid:
+                for cell in row:
+                    if cell.is_wall():
+                        prolog.assertz(f"wall({cell.abs}, {cell.ord})")
+
+            # Run Dijkstra's algorithm in Prolog with visualization feedback
+            query = f"dijkstra_with_visualization({start_pos}, {dest_pos}, Path, VisitedCells, 30)."
+            
+            # Execute query and retrieve results progressively
+            results = list(prolog.query(query))
+            
+            if results:  # Path found
+                result = results[0]
+                path = result['Path']
+                visited_cells = result['VisitedCells']
+
+                # Process each cell in VisitedCells
+                for cell_pos in visited_cells:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        cell = self.grid[y][x]
+
+                        if not cell.is_start() and not cell.is_dest():
+                            # Mark cell as to be visited (pink)
+                            cell.make_to_visit()
+                            app.update_idletasks()
+                            time.sleep(0.01)
+                            
+                            # Mark cell as visited (orange)
+                            cell.make_visited()
+                        discovered += 1
+
+                # Visualize final path
+                prev_cell = start_cell
+                for cell_pos in path:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        current_cell = self.grid[y][x]
+                        current_cell.prev = prev_cell
+                        if not current_cell.is_start() and not current_cell.is_dest():
+                            current_cell.make_path()
+                        prev_cell = current_cell
+                        app.update_idletasks()
+                        time.sleep(0.01)
+
+                # Show completion message
+                steps = len(path) - 1
+                messagebox.showinfo(
+                    "Path found",
+                    f"Cells Discovered: {discovered}\nDistance to destination: {steps}"
+                )
+
+            else:  # No path found
+                messagebox.showinfo("Path not found", "No solution exists")
+
+        except Exception as e:
+            print(f"Error during Dijkstra's algorithm: {e}")
+            messagebox.showerror("Error", f"Algorithm failed: {str(e)}")
+
+        finally:
+            # Ensure start and end points are correctly marked
+            self.grid[self.start[0]][self.start[1]].make_start()
+            self.grid[self.dest[0]][self.dest[1]].make_dest()
+
+        
 start_time = time.time()
 
 def run_time():
     # print("time running : {:.2f} s".format(time.time()-start_time))
     app.after(5000,run_time)
 
-if __name__ == "__main__" :
+if __name__ == "__main__":
     # Initialize Prolog engine
     prolog = Prolog()
-        # Get the current script directory and consult bfs.pl
-    prolog_dir = os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl')  # Adjust this path as needed
     try:
-        # Consult the bfs.pl file
-        prolog.consult(prolog_dir)
-        print("Prolog file consulted successfully.")
+        # Consult the bfs.pl, maze_logic.pl, and dijkstra.pl files
+        prolog.consult(os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl'))
+        prolog.consult(os.path.join(os.path.dirname(__file__), '../prolog/maze_logic.pl'))
+        prolog.consult(os.path.join(os.path.dirname(__file__), '../prolog/dijkstra.pl'))
+
+
+        print("Prolog files consulted successfully.")
     except Exception as e:
         print(f"Error consulting Prolog file: {e}")
-    app = ThemedTk(theme= 'arc')
-    pathfinding_visaul = MainPage(app)
+
+    app = ThemedTk(theme='arc')
+    pathfinding_visual = MainPage(app)
     app.title('Pathfinding Algorithm Visualizer')
-    app.after(0,run_time)
+    app.after(0, run_time)
     app.mainloop()
