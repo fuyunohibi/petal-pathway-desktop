@@ -172,6 +172,8 @@ class CellGrid(tkinter.Canvas):
             # Consult dfs.pl
             dfs_path = os.path.join(os.path.dirname(__file__), '../prolog/dfs.pl')
             self.prolog.consult(dfs_path)
+            dijkstra_path = os.path.join(os.path.dirname(__file__), '../prolog/dijkstra.pl')
+            self.prolog.consult(dijkstra_path)
             a_star_path = os.path.join(os.path.dirname(__file__), '../prolog/a_star.pl')
             self.prolog.consult(a_star_path)
             gen_map = os.path.join(os.path.dirname(__file__), '../prolog/gen_map.pl')
@@ -281,7 +283,7 @@ class CellGrid(tkinter.Canvas):
                     if 0 <= y < len(self.grid) and 0 <= x < len(self.grid[0]):
                         self.grid[y][x].make_empty()
                         app.update_idletasks()
-                        time.sleep(0.0001)
+                        time.sleep(0.00001)
 
                 print("Maze generation visualization completed.")
                 messagebox.showinfo("Success", "Maze generation completed successfully!")
@@ -380,15 +382,15 @@ class CellGrid(tkinter.Canvas):
         destination = f"cell({self.dest[1]}, {self.dest[0]})"
 
         # Ensure Prolog has the grid and wall data
-        prolog.retractall('grid_size(_, _)')
-        prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+        self.prolog.retractall('grid_size(_, _)')
+        self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
 
-        prolog.retractall('wall(_, _)')
+        self.prolog.retractall('wall(_, _)')
         for row in self.grid:
             for cell in row:
                 if cell.is_wall():
                     x, y = cell.abs, cell.ord
-                    prolog.assertz(f"wall({x}, {y})")
+                    self.prolog.assertz(f"wall({x}, {y})")
 
         # Initialize BFS loop to process step-by-step visualization
         solution_found = False
@@ -681,51 +683,140 @@ class CellGrid(tkinter.Canvas):
 
         messagebox.showinfo("Path not found", "No solution")
 
-
-
-
-
     def dijkstra(self):
         self.unbind_click()
         self.clear_prev_algo()
         discovered = 0
 
-        que = PriorityQueue()
-        count = 0 #used as tiebreaker for priority queue -> if distance is equal, whatever comes in the que first goes first
-        startCell = self.grid[self.start[0]][self.start[1]]
-        destCell = self.grid[self.dest[0]][self.dest[1]]
-        startCell.d = 0 #distance from start to itself = 0
-        track = {startCell} #keep track of cell in que
+        try:
+            # Get start and destination cells
+            start_cell = self.grid[self.start[0]][self.start[1]]
+            dest_cell = self.grid[self.dest[0]][self.dest[1]]
+
+            # Convert to Prolog coordinates
+            start_pos = f"({start_cell.abs}, {start_cell.ord})"
+            dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
+
+            # Reset Prolog knowledge base
+            self.prolog.retractall('grid_size(_, _)')
+            self.prolog.retractall('wall(_, _)')
+            self.prolog.retractall('visited(_, _)')
+            self.prolog.retractall('to_visit(_, _)')
+
+            # Set grid dimensions in Prolog
+            self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+
+            # Add walls to Prolog database
+            for row in self.grid:
+                for cell in row:
+                    if cell.is_wall():
+                        self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
+
+            # Run Dijkstra's algorithm in Prolog with visualization feedback
+            query = f"dijkstra_with_visualization({start_pos}, {dest_pos}, Path, VisitedCells, 30)."
+            
+            # Execute query and retrieve results progressively
+            results = list(self.prolog.query(query))
+            
+            if results:  # Path found
+                result = results[0]
+                path = result['Path']
+                visited_cells = result['VisitedCells']
+
+                # Process each cell in VisitedCells
+                for cell_pos in visited_cells:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        cell = self.grid[y][x]
+
+                        if not cell.is_start() and not cell.is_dest():
+                            # Mark cell as to be visited (pink)
+                            cell.make_to_visit()
+                            app.update_idletasks()
+                            time.sleep(0.01)
+                            
+                            # Mark cell as visited (orange)
+                            cell.make_visited()
+                        discovered += 1
+
+                # Visualize final path
+                prev_cell = start_cell
+                for cell_pos in path:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        current_cell = self.grid[y][x]
+                        current_cell.prev = prev_cell
+                        if not current_cell.is_start() and not current_cell.is_dest():
+                            current_cell.make_path()
+                        prev_cell = current_cell
+                        app.update_idletasks()
+                        time.sleep(0.01)
+
+                # Show completion message
+                steps = len(path) - 1
+                messagebox.showinfo(
+                    "Path found",
+                    f"Cells Discovered: {discovered}\nDistance to destination: {steps}"
+                )
+
+            else:  # No path found
+                messagebox.showinfo("Path not found", "No solution exists")
+
+        except Exception as e:
+            print(f"Error during Dijkstra's algorithm: {e}")
+            messagebox.showerror("Error", f"Algorithm failed: {str(e)}")
+
+        finally:
+            # Ensure start and end points are correctly marked
+            self.grid[self.start[0]][self.start[1]].make_start()
+            self.grid[self.dest[0]][self.dest[1]].make_dest()
+
+
+    # def dijkstra(self):
+    #     self.unbind_click()
+    #     self.clear_prev_algo()
+    #     discovered = 0
+
+    #     que = PriorityQueue()
+    #     count = 0 #used as tiebreaker for priority queue -> if distance is equal, whatever comes in the que first goes first
+    #     startCell = self.grid[self.start[0]][self.start[1]]
+    #     destCell = self.grid[self.dest[0]][self.dest[1]]
+    #     startCell.d = 0 #distance from start to itself = 0
+    #     track = {startCell} #keep track of cell in que
          
-        que.put((0,0,startCell))
+    #     que.put((0,0,startCell))
 
-        while not que.empty():
-            discovered +=1 
-            currentCell = que.get()[2] #get closest cell
-            track.remove(currentCell)
-            if currentCell == destCell:
-                steps = self.show_path(currentCell)
-                destCell.make_dest()
-                startCell.make_start()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                return
-            for neighbor in currentCell.neighbors:
-                """"compare between current + 1 and neighbor's distance"""
-                min_distance = min(neighbor.d,currentCell.d+1)
-                if min_distance != neighbor.d:
-                    neighbor.d = min_distance
-                    neighbor.prev = currentCell
+    #     while not que.empty():
+    #         discovered +=1 
+    #         currentCell = que.get()[2] #get closest cell
+    #         track.remove(currentCell)
+    #         if currentCell == destCell:
+    #             steps = self.show_path(currentCell)
+    #             destCell.make_dest()
+    #             startCell.make_start()
+    #             messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
+    #             return
+    #         for neighbor in currentCell.neighbors:
+    #             """"compare between current + 1 and neighbor's distance"""
+    #             min_distance = min(neighbor.d,currentCell.d+1)
+    #             if min_distance != neighbor.d:
+    #                 neighbor.d = min_distance
+    #                 neighbor.prev = currentCell
 
-                    if neighbor not in track:
-                        count += 1
-                        que.put((neighbor.d,count,neighbor))
-                        track.add(neighbor)
-                        neighbor.make_to_visit()
-                app.update_idletasks()
-                time.sleep(0.001)
-            if currentCell != startCell:
-                currentCell.make_visited()
-        messagebox.showinfo("Path not found","No solution")
+    #                 if neighbor not in track:
+    #                     count += 1
+    #                     que.put((neighbor.d,count,neighbor))
+    #                     track.add(neighbor)
+    #                     neighbor.make_to_visit()
+    #             app.update_idletasks()
+    #             time.sleep(0.001)
+    #         if currentCell != startCell:
+    #             currentCell.make_visited()
+    #     messagebox.showinfo("Path not found","No solution")
 start_time = time.time()
 
 def run_time():

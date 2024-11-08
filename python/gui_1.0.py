@@ -396,8 +396,6 @@ class CellGrid(tkinter.Canvas):
         self.grid[self.dest[0]][self.dest[1]].make_dest()
 
 
-
-
     def get_manhattan(self,cell1,cell2):
         x1,y1 = cell1.abs,cell1.ord
         x2,y2 = cell2.abs,cell2.ord
