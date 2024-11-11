@@ -18,19 +18,23 @@ class MainPage(ttk.Frame):
     def __init__(self, master):
         self.master = master
         
-        # Construct the absolute path to the wall image
-        base_dir = os.path.dirname(__file__)  # Get the directory of the current script
-        self.wall_image_path = os.path.join(base_dir, "../assets/images/walls/snow-brick.jpg")
+        base_dir = os.path.dirname(__file__) 
+        self.wall_image_path = os.path.join(base_dir, "../assets/images/textures/snow-brick.jpg")
+        self.grass_image_path = os.path.join(base_dir, "../assets/images/textures/grass-block.jpg")
         
         # Check if the image file exists
         if not os.path.exists(self.wall_image_path):
             print(f"Error: Wall image not found at {self.wall_image_path}")
             return
+        if not os.path.exists(self.grass_image_path):
+            print(f"Error: Grass image not found at {self.grass_image_path}")
+            return
       
-        # Load and resize the wall image
-        self.wall_image = Image.open(self.wall_image_path) 
-        self.wall_image = self.wall_image.resize((50, 50), Image.LANCZOS) 
+        # Load and resize the wall and grass images
+        self.wall_image = Image.open(self.wall_image_path).resize((50, 50), Image.LANCZOS)
+        self.grass_image = Image.open(self.grass_image_path).resize((30, 30), Image.LANCZOS)
         self.wall_photo = ImageTk.PhotoImage(self.wall_image)
+        self.grass_photo = ImageTk.PhotoImage(self.grass_image)
         
         self.frame = ttk.Frame(self.master)
         self.frame.pack(padx=2)
@@ -38,8 +42,8 @@ class MainPage(ttk.Frame):
         self.menu = MenuBar(self.frame)
         self.menu.pack(side=RIGHT, anchor=N, pady=50)
 
-        # Pass wall_photo to CellGrid
-        self.grid = CellGrid(self.frame, 30, 30, 30, wall_photo=self.wall_photo)
+        # Pass wall_photo and grass_photo to CellGrid
+        self.grid = CellGrid(self.frame, 30, 30, 30, wall_photo=self.wall_photo, grass_photo=self.grass_photo)
         self.grid.pack(padx=20, pady=20)
 
 class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
@@ -111,14 +115,14 @@ class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
 
 
 class Cell():
-    def __init__(self, master, x, y, size, wall_photo=None):
+    def __init__(self, master, x, y, size, wall_photo=None, grass_photo=None):
         self.master = master
         self.abs = x
         self.ord = y
         self.size= size
         self.color = 'white'
-        self.wall_photo = wall_photo
         self.is_wall_cell = False
+        self.is_path_cell = False
         self.g = float('inf') # number of steps from start for A*
         self.f = float('inf')      # f = g + hueristic(manhattan distance)
         self.d = float('inf') # distance from start point for Dijkstra algo
@@ -126,6 +130,8 @@ class Cell():
         self.prev = None # for reconstructing path
         self.start = False
         self.dest =False
+        self.wall_photo = wall_photo
+        self.grass_photo = grass_photo
         
     def is_start(self):
         return self.start
@@ -156,12 +162,14 @@ class Cell():
       return self.is_wall_cell
 
     def make_empty(self):
-        """Clear the cell, making it passable"""
-        self.is_wall_cell = False
-        self.color = 'white'
-        self.start = False
-        self.dest = False
-        self.draw()
+      """Clear the cell, making it passable"""
+      self.is_wall_cell = False
+      self.is_path_cell = False  
+      self.color = 'white'
+      self.start = False
+      self.dest = False
+      self.draw()
+
         
     def is_empty(self):
         return self.color == 'white'
@@ -174,11 +182,12 @@ class Cell():
         return self.color == 'orange'
       
     def make_path(self):
-        self.color = "red"
+        """Mark as part of the path"""
+        self.is_path_cell = True
         self.draw()
         
     def is_path(self):
-        return self.color == 'red'
+        return self.is_path_cell
       
     def make_to_visit(self):
         self.color = "magenta"
@@ -197,6 +206,9 @@ class Cell():
       if self.is_wall_cell and self.wall_photo:
           # Draw the wall image
           self.master.create_image(xmin, ymin, anchor='nw', image=self.wall_photo)
+      elif self.is_path_cell and self.grass_photo:
+          # Draw the grass image
+          self.master.create_image(xmin, ymin, anchor='nw', image=self.grass_photo)
       else:
           # Draw the cell with a color fill
           fill = self.color
@@ -204,23 +216,24 @@ class Cell():
           self.master.create_rectangle(xmin, ymin, xmax, ymax, fill=fill, outline=outline)
 
 class CellGrid(tkinter.Canvas):
-    def __init__(self, master, rowNumber, columnNumber, cellSize, wall_photo, *args, **kwargs):
+    def __init__(self, master, rowNumber, columnNumber, cellSize, wall_photo=None, grass_photo=None, *args, **kwargs):
         tkinter.Canvas.__init__(self, master, width = cellSize * columnNumber , height = cellSize * rowNumber, *args, **kwargs)
         self.rowNumber = rowNumber
         self.columnNumber = columnNumber
         self.cellSize = cellSize
-        self.wall_photo = wall_photo 
         self.choose_start = False
         self.choose_dest = False
         self.grid = []
         self.start = []
         self.dest = []
+        self.wall_photo = wall_photo 
+        self.grass_photo = grass_photo
         
         # Initialize the grid of cells
         for row in range(rowNumber):
             line = []
             for column in range(columnNumber):
-                line.append(Cell(self, column, row, cellSize, wall_photo=self.wall_photo))
+                line.append(Cell(self, column, row, cellSize, wall_photo=wall_photo, grass_photo=grass_photo))
             self.grid.append(line)
          
         # memorize the cells that have been modified to avoid many switching of state during mouse motion.
