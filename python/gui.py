@@ -1,7 +1,8 @@
 from queue import PriorityQueue
-from tkinter import ttk,StringVar,messagebox
 import tkinter
-from tkinter.constants import  N, RIGHT
+from tkinter import ttk, StringVar, messagebox, LEFT, RIGHT, BOTH
+import tkinter.ttk as ttk
+from tkinter.constants import N
 from ttkthemes import ThemedTk
 from collections import deque
 import time
@@ -26,25 +27,59 @@ class MainPage(ttk.Frame):
         
 
 class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
-    def __init__(self,master):
-        super().__init__(master, text = "Menu bar")
+    def __init__(self, master):
+        super().__init__(master, text="Menu bar")
         self.master = master
-        
-        self.algorithmsList = ["A*(A-Star) Pathfinding","Dijkstra's Shortest path Algorithm","Depth First Search","Breadth First Search"]
+
+        # Define algorithms list and dropdown selector
+        self.algorithmsList = [
+            "A*(A-Star) Pathfinding",
+            "Dijkstra's Shortest path Algorithm",
+            "Depth First Search",
+            "Breadth First Search"
+        ]
         self.selected_algo = StringVar(self)
         self.selected_algo.set(self.algorithmsList[0])
-        self.algorithmSelector = ttk.OptionMenu(self,self.selected_algo,"A*(A-Star) Pathfinding",*self.algorithmsList,command=self.get_selected_algo)
+        self.algorithmSelector = ttk.OptionMenu(
+            self,
+            self.selected_algo,
+            "A*(A-Star) Pathfinding",
+            *self.algorithmsList,
+            command=self.get_selected_algo
+        )
         self.algorithmSelector.config(width=50)
-        self.algorithmSelector.pack(pady=20,padx=20)
+        self.algorithmSelector.pack(pady=10, padx=20)  # Reduced pady for less vertical spacing
 
-        self.start_button = ttk.Button(self,text="Start",command=self.call_start_algo)
-        self.start_button.pack(pady = 20)
+        # Frame for positioning Start and Clear buttons
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill=BOTH, pady=10, padx=20)  # Reduced pady
 
-        self.clear_button = ttk.Button(self,text="Clear",command = self.call_clear_grid)
-        self.clear_button.pack(pady = 20)
+        # Style configuration for black text, padding, and rounded effect
+        style = ttk.Style()
+        style.configure("Rounded.TButton", font=("Arial", 10, "bold"), padding=10)
+        style.map("Rounded.TButton",
+            background=[("!disabled", "#D3D3D3"), ("active", "#C0C0C0")],  # Light gray colors
+            foreground=[("!disabled", "black")],
+        )
 
-        self.generate_maze_button = ttk.Button(self,text = "Generate Maze",command = self.call_generate_maze)
-        self.generate_maze_button.pack(pady = 20)
+        # Start button
+        self.start_button = ttk.Button(
+            button_frame, text="Start", command=self.call_start_algo, style="Rounded.TButton"
+        )
+        self.start_button.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 5))  # Reduced padx for closer spacing
+
+        # Clear button
+        self.clear_button = ttk.Button(
+            button_frame, text="Clear", command=self.call_clear_grid, style="Rounded.TButton"
+        )
+        self.clear_button.pack(side=RIGHT, fill=BOTH, expand=True, padx=(5, 0))  # Reduced padx for closer spacing
+
+        # Generate Maze button with padding and full width
+        self.generate_maze_button = ttk.Button(
+            self, text="Generate Maze", command=self.call_generate_maze, style="Rounded.TButton"
+        )
+        self.generate_maze_button.pack(fill=BOTH, pady=10, padx=20)  # Reduced pady for less spacing from the buttons above
+        
     def get_selected_algo(self,choice):
         print(self.selected_algo.get())
 
@@ -619,97 +654,108 @@ class CellGrid(tkinter.Canvas):
             messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
 
     # MAIN FUNCTION: Dijkstra's algorithm
-    def dijkstra(self):
-        self.unbind_click()
-        self.clear_prev_algo()
-        discovered = 0
+    def dfs(self):
+      self.unbind_click()
+      self.clear_prev_algo()
+      discovered = 0
 
-        try:
-            # Get start and destination cells
-            start_cell = self.grid[self.start[0]][self.start[1]]
-            dest_cell = self.grid[self.dest[0]][self.dest[1]]
+      try:
+          start_cell = self.grid[self.start[0]][self.start[1]]
+          dest_cell = self.grid[self.dest[0]][self.dest[1]]
+          start_pos = f"cell({start_cell.abs}, {start_cell.ord})"
+          dest_pos = f"cell({dest_cell.abs}, {dest_cell.ord})"
 
-            # Convert to Prolog coordinates
-            start_pos = f"({start_cell.abs}, {start_cell.ord})"
-            dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
+          print(f"DFS Start Position: {start_pos}")
+          print(f"DFS Destination Position: {dest_pos}")
 
-            # Reset Prolog knowledge base
-            self.prolog.retractall('grid_size(_, _)')
-            self.prolog.retractall('wall(_, _)')
-            self.prolog.retractall('visited(_, _)')
-            self.prolog.retractall('to_visit(_, _)')
+          # Reset Prolog knowledge base
+          self.prolog.retractall('grid_size(_, _)')
+          self.prolog.retractall('wall(_, _)')
+          self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+          
+          # Add walls to Prolog database
+          for row in self.grid:
+              for cell in row:
+                  if cell.is_wall():
+                      self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
 
-            # Set grid dimensions in Prolog
-            self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+          # Run DFS in Prolog and retrieve path
+          result = list(self.prolog.query(f"iddfs({start_pos}, {dest_pos}, Path, VisitedCells)"))
+          
+          # Debugging - Print Prolog query result
+          print("Prolog DFS Result:", result)
 
-            # Add walls to Prolog database
-            for row in self.grid:
-                for cell in row:
-                    if cell.is_wall():
-                        self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
+          if result:  # Check if result is non-empty
+              result = result[0]
+              
+              # Extract 'Path' and 'VisitedCells'
+              path = result.get('Path', [])
+              visited_cells = result.get('VisitedCells', [])
 
-            # Run Dijkstra's algorithm in Prolog with visualization feedback
-            query = f"dijkstra_with_visualization({start_pos}, {dest_pos}, Path, VisitedCells, 30)."
-            
-            # Execute query and retrieve results progressively
-            results = list(self.prolog.query(query))
-            
-            if results:  # Path found
-                result = results[0]
-                path = result['Path']
-                visited_cells = result['VisitedCells']
+              if not path:
+                  messagebox.showinfo("Path not found", "No solution exists")
+                  return
 
-                # Process each cell in VisitedCells
-                for cell_pos in visited_cells:
-                    pos_str = str(cell_pos).strip("'\" ,")
-                    coords = re.findall(r'\d+', pos_str)
-                    if len(coords) >= 2:
-                        x, y = int(coords[0]), int(coords[1])
-                        cell = self.grid[y][x]
+              # Display visited cells in the GUI
+              for cell_pos in visited_cells:
+                  # Ensure cell_pos is in the correct format
+                  if isinstance(cell_pos, dict) and 'X' in cell_pos and 'Y' in cell_pos:
+                      x, y = cell_pos["X"], cell_pos["Y"]
+                  elif isinstance(cell_pos, str):
+                      match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
+                      if match:
+                          x, y = int(match.group(1)), int(match.group(2))
+                      else:
+                          print("Unexpected format for visited cell:", cell_pos)
+                          messagebox.showerror("Error", f"Visited cell format is incorrect: {cell_pos}")
+                          return
+                  else:
+                      print("Unexpected format for visited cell:", cell_pos)
+                      messagebox.showerror("Error", f"Visited cell format is incorrect: {cell_pos}")
+                      return
 
-                        if not cell.is_start() and not cell.is_dest():
-                            # Mark cell as to be visited (pink)
-                            cell.make_to_visit()
-                            app.update_idletasks()
-                            time.sleep(0.01)
-                            
-                            # Mark cell as visited (orange)
-                            cell.make_visited()
-                        discovered += 1
+                  # Mark the cell as visited in the GUI
+                  cell = self.grid[y][x]
+                  if not cell.is_start() and not cell.is_dest():
+                      cell.make_visited()
+                      self.update_idletasks()
+                      time.sleep(0.01)
+                  discovered += 1
 
-                # Visualize final path
-                prev_cell = start_cell
-                for cell_pos in path:
-                    pos_str = str(cell_pos).strip("'\" ,")
-                    coords = re.findall(r'\d+', pos_str)
-                    if len(coords) >= 2:
-                        x, y = int(coords[0]), int(coords[1])
-                        current_cell = self.grid[y][x]
-                        current_cell.prev = prev_cell
-                        if not current_cell.is_start() and not current_cell.is_dest():
-                            current_cell.make_path()
-                        prev_cell = current_cell
-                        app.update_idletasks()
-                        time.sleep(0.01)
+              # Display path in the GUI
+              for cell_pos in path:
+                  # Ensure cell_pos is in the correct format
+                  if isinstance(cell_pos, dict) and 'X' in cell_pos and 'Y' in cell_pos:
+                      x, y = cell_pos["X"], cell_pos["Y"]
+                  elif isinstance(cell_pos, str):
+                      match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
+                      if match:
+                          x, y = int(match.group(1)), int(match.group(2))
+                      else:
+                          print("Unexpected format for path cell:", cell_pos)
+                          messagebox.showerror("Error", f"Path cell format is incorrect: {cell_pos}")
+                          return
+                  else:
+                      print("Unexpected format for path cell:", cell_pos)
+                      messagebox.showerror("Error", f"Path cell format is incorrect: {cell_pos}")
+                      return
 
-                # Show completion message
-                steps = len(path) - 1
-                messagebox.showinfo(
-                    "Path found",
-                    f"Cells Discovered: {discovered}\nDistance to destination: {steps}"
-                )
+                  # Mark the cell as part of the path in the GUI
+                  cell = self.grid[y][x]
+                  if not cell.is_start() and not cell.is_dest():
+                      cell.make_path()
+                      self.update_idletasks()
+                      time.sleep(0.01)
 
-            else:  # No path found
-                messagebox.showinfo("Path not found", "No solution exists")
+              messagebox.showinfo("Path found", f"Cells Discovered: {discovered}\nDistance to destination: {len(path)-1}")
 
-        except Exception as e:
-            print(f"Error during Dijkstra's algorithm: {e}")
-            messagebox.showerror("Error", f"Algorithm failed: {str(e)}")
+          else:
+              messagebox.showinfo("Path not found", "No solution exists")
 
-        finally:
-            # Ensure start and end points are correctly marked
-            self.grid[self.start[0]][self.start[1]].make_start()
-            self.grid[self.dest[0]][self.dest[1]].make_dest()
+      except Exception as e:
+          print(f"Error during DFS algorithm: {e}")
+          messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
+
                
                
 start_time = time.time()
