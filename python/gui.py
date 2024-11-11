@@ -12,19 +12,35 @@ import pyswip
 import threading
 import re  # For regular expressions to parse the string
 import os
+from PIL import Image, ImageTk
 
 class MainPage(ttk.Frame):
     def __init__(self, master):
         self.master = master
+        
+        # Construct the absolute path to the wall image
+        base_dir = os.path.dirname(__file__)  # Get the directory of the current script
+        self.wall_image_path = os.path.join(base_dir, "../assets/images/walls/snow-brick.jpg")
+        
+        # Check if the image file exists
+        if not os.path.exists(self.wall_image_path):
+            print(f"Error: Wall image not found at {self.wall_image_path}")
+            return
+      
+        # Load and resize the wall image
+        self.wall_image = Image.open(self.wall_image_path) 
+        self.wall_image = self.wall_image.resize((50, 50), Image.LANCZOS) 
+        self.wall_photo = ImageTk.PhotoImage(self.wall_image)
+        
         self.frame = ttk.Frame(self.master)
         self.frame.pack(padx=2)
 
         self.menu = MenuBar(self.frame)
-        self.menu.pack(side=RIGHT,anchor=N,pady=50)
+        self.menu.pack(side=RIGHT, anchor=N, pady=50)
 
-        self.grid = CellGrid(self.frame, 30, 30, 30)
-        self.grid.pack(padx=20,pady=20)
-        
+        # Pass wall_photo to CellGrid
+        self.grid = CellGrid(self.frame, 30, 30, 30, wall_photo=self.wall_photo)
+        self.grid.pack(padx=20, pady=20)
 
 class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
     def __init__(self, master):
@@ -95,108 +111,126 @@ class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
 
 
 class Cell():
-    def __init__(self, master, x, y, size):
-        """ Constructor of the object called by Cell(...) """
+    def __init__(self, master, x, y, size, wall_photo=None):
         self.master = master
         self.abs = x
         self.ord = y
         self.size= size
+        self.color = 'white'
+        self.wall_photo = wall_photo
+        self.is_wall_cell = False
         self.g = float('inf') # number of steps from start for A*
         self.f = float('inf')      # f = g + hueristic(manhattan distance)
         self.d = float('inf') # distance from start point for Dijkstra algo
-        self.color = 'white'
         self.neighbor = [] # keeps adjacent cells
         self.prev = None # for reconstructing path
         self.start = False
         self.dest =False
-
-    def make_start(self):
-        """"mark a cell as starting point"""
-        self.color = "yellow"
-        self.start = True
-        self.draw()
+        
     def is_start(self):
         return self.start
-    def make_dest(self):
-        """"mark a cell as destination point"""
-        self.color = 'blue'
-        self.dest = True
-        self.draw()
+      
     def is_dest(self):
         return self.dest
+
+    def make_start(self):
+        """Mark as starting point"""
+        self.color = "yellow"
+        self.start = True
+        self.is_wall_cell = False
+        self.draw()
+        
+    def make_dest(self):
+        """Mark as destination point"""
+        self.color = "blue"
+        self.dest = True
+        self.is_wall_cell = False
+        self.draw()
+        
     def make_wall(self):
-        """"mark as wall/obstacle(cannot pass)"""
-        self.color = 'green'
+        """Mark as wall/obstacle (cannot pass)"""
+        self.is_wall_cell = True
         self.draw()
+        
     def is_wall(self):
-        return self.color == 'green'
+      return self.is_wall_cell
+
     def make_empty(self):
+        """Clear the cell, making it passable"""
+        self.is_wall_cell = False
         self.color = 'white'
+        self.start = False
+        self.dest = False
         self.draw()
+        
     def is_empty(self):
         return self.color == 'white'
+      
     def make_visited(self):
         self.color = "orange"
         self.draw()
+        
     def is_visited(self):
         return self.color == 'orange'
+      
     def make_path(self):
         self.color = "red"
         self.draw()
+        
     def is_path(self):
         return self.color == 'red'
+      
     def make_to_visit(self):
         self.color = "magenta"
         self.draw()
+        
     def is_to_visit(self):
         return self.color == 'magenta'
 
     def draw(self):
-        """ order to the cell to draw its representation on the canvas """
-        if self.master != None :
-            fill = self.color
-            outline = 'black'
-            xmin = self.abs * self.size
-            xmax = xmin + self.size
-            ymin = self.ord * self.size
-            ymax = ymin + self.size
+      """Draw the cell on the canvas"""
+      xmin = self.abs * self.size
+      xmax = xmin + self.size
+      ymin = self.ord * self.size
+      ymax = ymin + self.size
 
-            self.master.create_rectangle(xmin, ymin, xmax, ymax, fill = fill, outline = outline)
-
+      if self.is_wall_cell and self.wall_photo:
+          # Draw the wall image
+          self.master.create_image(xmin, ymin, anchor='nw', image=self.wall_photo)
+      else:
+          # Draw the cell with a color fill
+          fill = self.color
+          outline = 'black'
+          self.master.create_rectangle(xmin, ymin, xmax, ymax, fill=fill, outline=outline)
 
 class CellGrid(tkinter.Canvas):
-    def __init__(self,master, rowNumber, columnNumber, cellSize, *args, **kwargs):
+    def __init__(self, master, rowNumber, columnNumber, cellSize, wall_photo, *args, **kwargs):
         tkinter.Canvas.__init__(self, master, width = cellSize * columnNumber , height = cellSize * rowNumber, *args, **kwargs)
         self.rowNumber = rowNumber
         self.columnNumber = columnNumber
         self.cellSize = cellSize
+        self.wall_photo = wall_photo 
         self.choose_start = False
         self.choose_dest = False
         self.grid = []
         self.start = []
         self.dest = []
+        
+        # Initialize the grid of cells
         for row in range(rowNumber):
-
             line = []
             for column in range(columnNumber):
-                line.append(Cell(self, column, row, cellSize))
-
+                line.append(Cell(self, column, row, cellSize, wall_photo=self.wall_photo))
             self.grid.append(line)
-
+         
         # memorize the cells that have been modified to avoid many switching of state during mouse motion.
-        self.switched = []
-
-        # bind click action
-        self.bind("<Button-1>", self.handleMouseClick)  
-        #bind moving while clicking
-        self.bind("<B1-Motion>", self.handleMouseMotion)
-        #bind release button action - clear the memory of midified cells.
-        self.bind("<ButtonRelease-1>", lambda event: self.switched.clear())
-
+        self.switched = [] # Tracks modified cells during mouse motion
+        self.bind("<Button-1>", self.handleMouseClick) # bind click action
+        self.bind("<B1-Motion>", self.handleMouseMotion) # bind moving while clicking
+        self.bind("<ButtonRelease-1>", lambda event: self.switched.clear()) # bind release button action - clear the memory of midified cells.
         self.draw()
-
-                # Initialize Prolog engine and consult bfs.pl
         self.prolog = Prolog()
+        
         try:
             manhattan_distance_path = os.path.join(os.path.dirname(__file__), '../prolog/manhattan_distance.pl')
             self.prolog.consult(manhattan_distance_path)
@@ -216,8 +250,7 @@ class CellGrid(tkinter.Canvas):
         except Exception as e:
             print(f"Error consulting Prolog files: {e}")
 
-    def unbind_click(self):
-        #unbind to disable clicking while running
+    def unbind_click(self): # unbind to disable clicking while running
         self.unbind("<Button-1>")  
         self.unbind("<B1-Motion>")
         self.unbind("<ButtonRelease-1>")
@@ -248,7 +281,7 @@ class CellGrid(tkinter.Canvas):
         if(self.choose_start and self.choose_dest ):
             if not (cell.is_wall() or cell.is_start() or cell.is_dest() ):
                 cell.make_wall()
-            #add the cell to the list of cell switched during the click
+            # Add the cell to the list of cell switched during the click
             elif cell.is_wall():
                 cell.make_empty()
             self.switched.append(cell)
@@ -756,8 +789,7 @@ class CellGrid(tkinter.Canvas):
           print(f"Error during DFS algorithm: {e}")
           messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
 
-               
-               
+                        
 start_time = time.time()
 
 def run_time():
