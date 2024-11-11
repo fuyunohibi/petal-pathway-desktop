@@ -18,7 +18,7 @@ valid_cell(cell(X, Y)) :-
     Y >= 0, Y < MaxY,
     \+ wall(X, Y).
 
-% Find valid neighbors with Manhattan distance
+% A* neighbor discovery with calculated g and f scores
 a_star_neighbors(Current, Destination, Neighbors) :-
     findall([Neighbor, GNew, F],
             (neighbor(Current, Neighbor),
@@ -27,3 +27,20 @@ a_star_neighbors(Current, Destination, Neighbors) :-
              manhattan(Neighbor, Destination, H),
              F is GNew + H),
             Neighbors).
+
+% A* step: find the optimal path from Current to Destination
+a_star_step(Current, Destination, Path, Distance) :-
+    a_star(Current, Destination, [], Path, 0, Distance).
+
+% Recursive A* algorithm
+a_star(Current, Destination, Visited, [Current|Visited], G, G) :-
+    Current = Destination.
+
+a_star(Current, Destination, Visited, Path, G, Distance) :-
+    a_star_neighbors(Current, Destination, Neighbors),
+    % Select the neighbor with the lowest F score (tie-breaking by G)
+    sort(2, @=<, Neighbors, SortedNeighbors),
+    member([Next, GNew, _], SortedNeighbors),
+    \+ member(Next, Visited),
+    GAccumulated is G + GNew,
+    a_star(Next, Destination, [Current|Visited], Path, GAccumulated, Distance).

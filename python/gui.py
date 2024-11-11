@@ -166,6 +166,8 @@ class CellGrid(tkinter.Canvas):
                 # Initialize Prolog engine and consult bfs.pl
         self.prolog = Prolog()
         try:
+            manhattan_distance_path = os.path.join(os.path.dirname(__file__), '../prolog/manhattan_distance.pl')
+            self.prolog.consult(manhattan_distance_path)
             # Consult bfs.pl
             bfs_path = os.path.join(os.path.dirname(__file__), '../prolog/bfs.pl')
             self.prolog.consult(bfs_path)
