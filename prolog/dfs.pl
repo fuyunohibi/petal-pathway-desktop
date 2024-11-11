@@ -2,42 +2,38 @@
 :- dynamic grid_size/2.
 
 % Define neighboring cells
-dfs_neighbor(cell(X, Y), cell(X1, Y)) :- 
-    X1 is X + 1.  % Right
-dfs_neighbor(cell(X, Y), cell(X1, Y)) :- 
-    X1 is X - 1.  % Left
-dfs_neighbor(cell(X, Y), cell(X, Y1)) :- 
-    Y1 is Y + 1.  % Down
-dfs_neighbor(cell(X, Y), cell(X, Y1)) :- 
-    Y1 is Y - 1.  % Up
+neighbor(cell(X, Y), cell(X1, Y)) :- X1 is X + 1.
+neighbor(cell(X, Y), cell(X1, Y)) :- X1 is X - 1.
+neighbor(cell(X, Y), cell(X, Y1)) :- Y1 is Y + 1.
+neighbor(cell(X, Y), cell(X, Y1)) :- Y1 is Y - 1.
 
-% Check if a cell is valid (within grid and not a wall)
-dfs_valid_cell(cell(X, Y)) :-
+% Check if a cell is valid (within grid bounds and not a wall)
+valid_cell(cell(X, Y)) :-
     grid_size(MaxX, MaxY),
     X >= 0, X < MaxX,
     Y >= 0, Y < MaxY,
     \+ wall(X, Y).
 
-% DFS step-by-step function
-dfs_step(Current, Destination, Path, Visited, ToVisit) :-
-    dfs_helper([Current], Destination, [], [], Visited, ToVisit, SolutionPath),
-    (SolutionPath \= [] -> reverse(SolutionPath, Path); Path = []).
+% Depth-First Search entry point
+dfs(Start, Destination, Path, VisitedCells) :-
+    writeln('Starting DFS...'),  % Debug: Starting DFS
+    dfs_recursive(Start, Destination, [Start], VisitedCells, Path),
+    writeln('DFS Completed').     % Debug: Completed DFS
 
-% Base case: if the current cell is the destination, return the path
-dfs_helper([Destination | Path], Destination, VisitedAcc, _, Visited, [], [Destination | Path]) :-
-    append([Destination | Path], VisitedAcc, Visited).
+% Base case: if we reach the destination
+dfs_recursive(Destination, Destination, Visited, Visited, Path) :-
+    reverse([Destination | Visited], Path),
+    writeln('Destination reached.').
 
-% Recursive DFS search with step-by-step functionality
-dfs_helper([Current | Stack], Destination, VisitedAcc, _, Visited, ToVisit, SolutionPath) :-
-    % Find all valid, unvisited neighbors
-    findall(Neighbor,
-            (dfs_neighbor(Current, Neighbor),
-             dfs_valid_cell(Neighbor),
-             \+ member(Neighbor, VisitedAcc),
-             \+ member(Neighbor, Stack)),
-            Neighbors),
-    % Update stack and visited cells
-    append(Neighbors, Stack, UpdatedStack),
-    append(VisitedAcc, [Current], UpdatedVisited),
-    ToVisit = Neighbors,  % Return neighbors to visit in this step
-    dfs_helper(UpdatedStack, Destination, UpdatedVisited, Neighbors, Visited, _, SolutionPath).
+% Recursive DFS step
+dfs_recursive(Current, Destination, Visited, VisitedCells, Path) :-
+    Current \= Destination,
+    neighbor(Current, Neighbor),
+    valid_cell(Neighbor),
+    \+ member(Neighbor, Visited),  % Only visit unvisited cells
+    writeln(['Current:', Current, 'Moving to:', Neighbor]),  % Debug: Neighbor to visit
+    dfs_recursive(Neighbor, Destination, [Neighbor | Visited], VisitedCells, Path).
+
+% Backtracking if no solution is found
+dfs_recursive(_, _, Visited, Visited, []) :-
+    writeln('Backtracking: no solution found from current path.').

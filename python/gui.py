@@ -13,7 +13,6 @@ import re  # For regular expressions to parse the string
 import os
 
 class MainPage(ttk.Frame):
-    
     def __init__(self, master):
         self.master = master
         self.frame = ttk.Frame(self.master)
@@ -26,7 +25,7 @@ class MainPage(ttk.Frame):
         self.grid.pack(padx=20,pady=20)
         
 
-class MenuBar(ttk.LabelFrame):# buttons for startPoint,endPoint,wall
+class MenuBar(ttk.LabelFrame):# NOTE: buttons for startPoint, endPoint, wall
     def __init__(self,master):
         super().__init__(master, text = "Menu bar")
         self.master = master
@@ -61,22 +60,20 @@ class MenuBar(ttk.LabelFrame):# buttons for startPoint,endPoint,wall
 
 
 class Cell():
-
     def __init__(self, master, x, y, size):
         """ Constructor of the object called by Cell(...) """
         self.master = master
         self.abs = x
         self.ord = y
         self.size= size
-        self.g = float('inf') #number of steps from start for A*
-        self.f = float('inf')      #f = g + hueristic(manhattan distance)
-        self.d = float('inf') #distance from start point for Dijkstra algo
+        self.g = float('inf') # number of steps from start for A*
+        self.f = float('inf')      # f = g + hueristic(manhattan distance)
+        self.d = float('inf') # distance from start point for Dijkstra algo
         self.color = 'white'
-        self.neighbor = [] #keeps adjacent cells
-        self.prev = None #for reconstructing path
+        self.neighbor = [] # keeps adjacent cells
+        self.prev = None # for reconstructing path
         self.start = False
         self.dest =False
-
 
     def make_start(self):
         """"mark a cell as starting point"""
@@ -151,10 +148,10 @@ class CellGrid(tkinter.Canvas):
 
             self.grid.append(line)
 
-        #memorize the cells that have been modified to avoid many switching of state during mouse motion.
+        # memorize the cells that have been modified to avoid many switching of state during mouse motion.
         self.switched = []
 
-        #bind click action
+        # bind click action
         self.bind("<Button-1>", self.handleMouseClick)  
         #bind moving while clicking
         self.bind("<B1-Motion>", self.handleMouseMotion)
@@ -336,7 +333,6 @@ class CellGrid(tkinter.Canvas):
         self.draw()
 
     def clear_prev_algo(self):
-
         for row in self.grid:
             for cell in row:
                 if cell.is_visited() or cell.is_to_visit() or cell.is_path():
@@ -376,6 +372,7 @@ class CellGrid(tkinter.Canvas):
             curr = prev
         return count
 
+    # MAIN FUNCTION: Breadth First Search
     def bfs(self):
         self.clear_prev_algo()
         self.unbind_click()
@@ -450,168 +447,14 @@ class CellGrid(tkinter.Canvas):
             else:
                 messagebox.showinfo("Path Not Found", "No solution")
                 break
-
-    def dfs(self):
-        self.clear_prev_algo()
-        self.unbind_click()
-        discovered = 0
-
-        que = deque()
-        que.append(self.grid[self.start[0]][self.start[1]])
-        visited = {que[0]}
-        while(len(que) > 0):
-            cell = que.pop()
-            discovered += 1
-            cell.draw()
-            if cell.ord == self.dest[0] and cell.abs == self.dest[1]:
-                steps = self.show_path(cell)
-                self.grid[self.start[0]][self.start[1]].make_start()
-                self.grid[self.dest[0]][self.dest[1]].make_dest()
-                messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-                
-                return
-
-            for neighbor in cell.neighbors:
-                if neighbor in visited:
-                    continue
-                else:
-                    neighbor.prev = cell
-                    que.append(neighbor)
-                    visited.add(neighbor)
-                    neighbor.make_to_visit()
-            if(not cell.is_start()):
-                cell.make_visited()
-                app.update_idletasks()
-                time.sleep(0.001)
-        messagebox.showinfo("Path not found","No solution")
-
-    def dfss(self):
-        self.clear_prev_algo()
-        self.unbind_click()
-
-        start = f"cell({self.start[1]}, {self.start[0]})"
-        destination = f"cell({self.dest[1]}, {self.dest[0]})"
-
-        # Ensure Prolog has the grid and wall data
-        self.prolog.retractall('grid_size(_, _)')
-        self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
-
-        self.prolog.retractall('wall(_, _)')
-        for row in self.grid:
-            for cell in row:
-                if cell.is_wall():
-                    x, y = cell.abs, cell.ord
-                    self.prolog.assertz(f"wall({x}, {y})")
-
-        # Initialize DFS in Prolog
-        solution_found = False
-        current = start
-
-        while not solution_found:
-            # Prolog query for the next DFS step
-            query = f"dfs_step({current}, {destination}, Path, Visited, ToVisit)"
-            result = list(self.prolog.query(query))
-
-            if not result:
-                messagebox.showinfo("Path Not Found", "No solution")
-                return
-
-            result = result[0]
-
-            # Handle ToVisit cells for visualization
-            to_visit = result.get('ToVisit', [])
-            for cell_str in to_visit:
-                match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
-                if match:
-                    x, y = int(match.group(1)), int(match.group(2))
-                    cell = self.grid[y][x]
-                    if not cell.is_start() and not cell.is_dest():
-                        cell.make_to_visit()
-                        app.update_idletasks()
-                        time.sleep(0.001)  # Short delay for visualization
-
-            # Handle Visited cells for visualization
-            visited = result.get('Visited', [])
-            for cell_str in visited:
-                match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
-                if match:
-                    x, y = int(match.group(1)), int(match.group(2))
-                    cell = self.grid[y][x]
-                    if not cell.is_start() and not cell.is_dest():
-                        cell.make_visited()
-                        app.update_idletasks()
-                        time.sleep(0.001)  # Short delay for visualization
-
-            # Check if the destination has been reached
-            path = result.get('Path', [])
-            if path:
-                for cell_str in path:
-                    match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
-                    if match:
-                        x, y = int(match.group(1)), int(match.group(2))
-                        cell = self.grid[y][x]
-                        if not cell.is_start() and not cell.is_dest():
-                            cell.make_path()
-                            app.update_idletasks()
-                            time.sleep(0.01)  # Slightly longer delay for path visualization
-                solution_found = True
-                messagebox.showinfo("Path Found", f"Cells Discovered: {len(visited)}\nDistance to destination: {len(path)-1}")
-                break
-
-            # Update the current cell to continue DFS from the stack’s top
-            if to_visit:
-                current = to_visit[0]
-
-    # def a_star(self):
-    #     self.unbind_click()
-    #     self.clear_prev_algo()
-    #     discovered = 0
-    #     count = 0
-    #     startCell = self.grid[self.start[0]][self.start[1]]
-    #     destCell = self.grid[self.dest[0]][self.dest[1]]
-    #     que = PriorityQueue()
-    #     que.put((0,count,startCell))
-
-    #     track = {startCell}#keep track of cells in que
-
-    #     startCell.g = 0
-    #     startCell.f = self.get_manhattan(startCell,destCell)
-
-    #     while not que.empty():
-    #         discovered += 1
-    #         currentCell = que.get()[2]
-    #         track.remove(currentCell)
-    #         if currentCell == destCell:
-    #             steps = self.show_path(destCell)
-    #             destCell.make_dest()
-    #             startCell.make_start()
-    #             messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
-    #             return
-            
-    #         for neighbor in currentCell.neighbors:
-    #             tmp = currentCell.g +1
-
-    #             if tmp < neighbor.g:
-    #                 neighbor.prev = currentCell
-    #                 neighbor.g = tmp
-    #                 neighbor.f = tmp + self.get_manhattan(neighbor,destCell)
-
-    #                 if neighbor not in track:
-    #                     count+=1
-    #                     que.put((neighbor.f,count,neighbor))
-    #                     track.add(neighbor)
-    #                     neighbor.make_to_visit()
-    #             app.update_idletasks()
-    #             time.sleep(0.001)
-    #         if currentCell != startCell:
-    #             currentCell.make_visited()
-    #     messagebox.showinfo("Path not found","No solution")
-
+    
+    # Manhattan distance heuristic for A* algorithm       
     def get_manhattan(self,cell1,cell2):
         x1,y1 = cell1.abs,cell1.ord
         x2,y2 = cell2.abs,cell2.ord
         return abs(x1-x2) + abs(y1-y2)
-
+    
+    # MAIN FUNCTION: A* algorithm
     def a_star(self):
         self.unbind_click()
         self.clear_prev_algo()
@@ -684,7 +527,98 @@ class CellGrid(tkinter.Canvas):
                     current_cell.make_visited()
 
         messagebox.showinfo("Path not found", "No solution")
+       
+    # MAIN FUNCTION: Depth First Search 
+    def dfs(self):
+        self.unbind_click()
+        self.clear_prev_algo()
+        discovered = 0
 
+        try:
+            start_cell = self.grid[self.start[0]][self.start[1]]
+            dest_cell = self.grid[self.dest[0]][self.dest[1]]
+            start_pos = f"cell({start_cell.abs}, {start_cell.ord})"
+            dest_pos = f"cell({dest_cell.abs}, {dest_cell.ord})"
+
+            print(f"DFS Start Position: {start_pos}")
+            print(f"DFS Destination Position: {dest_pos}")
+
+            # Reset Prolog knowledge base
+            self.prolog.retractall('grid_size(_, _)')
+            self.prolog.retractall('wall(_, _)')
+            self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+            
+            # Add walls to Prolog database
+            for row in self.grid:
+                for cell in row:
+                    if cell.is_wall():
+                        self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
+
+            # Run DFS in Prolog and retrieve path
+            result = list(self.prolog.query(f"dfs({start_pos}, {dest_pos}, Path, VisitedCells)"))
+            
+            # Debugging - Print Prolog query result
+            print("Prolog DFS Result:", result)
+
+            if result:  # Check if result is non-empty
+                result = result[0]
+                
+                # Extract 'Path' and 'VisitedCells'
+                path = result.get('Path', [])
+                visited_cells = result.get('VisitedCells', [])
+
+                # print("VisitedCells structure:", visited_cells)
+
+                if not path:
+                    messagebox.showinfo("Path not found", "No solution exists")
+                    return
+
+                # Display visited cells in the GUI
+                for cell_pos in visited_cells:
+                    # print("Processing visited cell:", cell_pos) 
+                    
+                    # Use regex to parse cell(X, Y) format
+                    match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
+                    if match:
+                        x, y = int(match.group(1)), int(match.group(2))
+                        cell = self.grid[y][x]
+                        if not cell.is_start() and not cell.is_dest():
+                            cell.make_visited()
+                            self.update_idletasks()
+                            time.sleep(0.01)
+                        discovered += 1
+                    else:
+                        print("Unexpected format for visited cell:", cell_pos)
+                        messagebox.showerror("Error", f"Visited cell format is incorrect: {cell_pos}")
+                        return
+
+                for cell_pos in path:
+                    print("Processing path cell:", cell_pos)  
+                    
+                    # Use regex to parse cell(X, Y) format
+                    match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
+                    if match:
+                        x, y = int(match.group(1)), int(match.group(2))
+                        cell = self.grid[y][x]
+                        if not cell.is_start() and not cell.is_dest():
+                            cell.make_path()
+                            self.update_idletasks()
+                            time.sleep(0.01)
+                    else:
+                        print("Unexpected format for path cell:", cell_pos)
+                        messagebox.showerror("Error", f"Path cell format is incorrect: {cell_pos}")
+                        return
+
+                messagebox.showinfo("Path found", f"Cells Discovered: {discovered}\nDistance to destination: {len(path)-1}")
+
+            else:
+                messagebox.showinfo("Path not found", "No solution exists")
+
+        except Exception as e:
+            print(f"Error during DFS algorithm: {e}")
+            messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
+
+    # MAIN FUNCTION: Dijkstra's algorithm
     def dijkstra(self):
         self.unbind_click()
         self.clear_prev_algo()
@@ -776,7 +710,99 @@ class CellGrid(tkinter.Canvas):
             # Ensure start and end points are correctly marked
             self.grid[self.start[0]][self.start[1]].make_start()
             self.grid[self.dest[0]][self.dest[1]].make_dest()
+               
+               
+start_time = time.time()
 
+def run_time():
+    print("time running : {:.2f} s".format(time.time()-start_time))
+    app.after(5000,run_time)
+
+if __name__ == "__main__" :
+    app = ThemedTk(theme= 'arc')
+    pathfinding_visaul = MainPage(app)
+    app.title('Pathfinding Algorithm Visualizer')
+    app.after(0,run_time)
+    app.mainloop()
+    
+    # def dfs(self):
+    #     self.clear_prev_algo()
+    #     self.unbind_click()
+    #     discovered = 0
+
+    #     que = deque()
+    #     que.append(self.grid[self.start[0]][self.start[1]])
+    #     visited = {que[0]}
+    #     while(len(que) > 0):
+    #         cell = que.pop()
+    #         discovered += 1
+    #         cell.draw()
+    #         if cell.ord == self.dest[0] and cell.abs == self.dest[1]:
+    #             steps = self.show_path(cell)
+    #             self.grid[self.start[0]][self.start[1]].make_start()
+    #             self.grid[self.dest[0]][self.dest[1]].make_dest()
+    #             messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
+                
+    #             return
+
+    #         for neighbor in cell.neighbors:
+    #             if neighbor in visited:
+    #                 continue
+    #             else:
+    #                 neighbor.prev = cell
+    #                 que.append(neighbor)
+    #                 visited.add(neighbor)
+    #                 neighbor.make_to_visit()
+    #         if(not cell.is_start()):
+    #             cell.make_visited()
+    #             app.update_idletasks()
+    #             time.sleep(0.001)
+    #     messagebox.showinfo("Path not found","No solution")
+
+    # def a_star(self):
+    #     self.unbind_click()
+    #     self.clear_prev_algo()
+    #     discovered = 0
+    #     count = 0
+    #     startCell = self.grid[self.start[0]][self.start[1]]
+    #     destCell = self.grid[self.dest[0]][self.dest[1]]
+    #     que = PriorityQueue()
+    #     que.put((0,count,startCell))
+
+    #     track = {startCell}#keep track of cells in que
+
+    #     startCell.g = 0
+    #     startCell.f = self.get_manhattan(startCell,destCell)
+
+    #     while not que.empty():
+    #         discovered += 1
+    #         currentCell = que.get()[2]
+    #         track.remove(currentCell)
+    #         if currentCell == destCell:
+    #             steps = self.show_path(destCell)
+    #             destCell.make_dest()
+    #             startCell.make_start()
+    #             messagebox.showinfo("path found","Cells Discoverd: {}\nDistance to destination: {}".format(discovered,steps))
+    #             return
+            
+    #         for neighbor in currentCell.neighbors:
+    #             tmp = currentCell.g +1
+
+    #             if tmp < neighbor.g:
+    #                 neighbor.prev = currentCell
+    #                 neighbor.g = tmp
+    #                 neighbor.f = tmp + self.get_manhattan(neighbor,destCell)
+
+    #                 if neighbor not in track:
+    #                     count+=1
+    #                     que.put((neighbor.f,count,neighbor))
+    #                     track.add(neighbor)
+    #                     neighbor.make_to_visit()
+    #             app.update_idletasks()
+    #             time.sleep(0.001)
+    #         if currentCell != startCell:
+    #             currentCell.make_visited()
+    #     messagebox.showinfo("Path not found","No solution")
 
     # def dijkstra(self):
     #     self.unbind_click()
@@ -819,15 +845,81 @@ class CellGrid(tkinter.Canvas):
     #         if currentCell != startCell:
     #             currentCell.make_visited()
     #     messagebox.showinfo("Path not found","No solution")
-start_time = time.time()
 
-def run_time():
-    print("time running : {:.2f} s".format(time.time()-start_time))
-    app.after(5000,run_time)
 
-if __name__ == "__main__" :
-    app = ThemedTk(theme= 'arc')
-    pathfinding_visaul = MainPage(app)
-    app.title('Pathfinding Algorithm Visualizer')
-    app.after(0,run_time)
-    app.mainloop()
+# def dfss(self):
+#         self.clear_prev_algo()
+#         self.unbind_click()
+
+#         start = f"cell({self.start[1]}, {self.start[0]})"
+#         destination = f"cell({self.dest[1]}, {self.dest[0]})"
+
+#         # Ensure Prolog has the grid and wall data
+#         self.prolog.retractall('grid_size(_, _)')
+#         self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
+
+#         self.prolog.retractall('wall(_, _)')
+#         for row in self.grid:
+#             for cell in row:
+#                 if cell.is_wall():
+#                     x, y = cell.abs, cell.ord
+#                     self.prolog.assertz(f"wall({x}, {y})")
+
+#         # Initialize DFS in Prolog
+#         solution_found = False
+#         current = start
+
+#         while not solution_found:
+#             # Prolog query for the next DFS step
+#             query = f"dfs_step({current}, {destination}, Path, Visited, ToVisit)"
+#             result = list(self.prolog.query(query))
+
+#             if not result:
+#                 messagebox.showinfo("Path Not Found", "No solution")
+#                 return
+
+#             result = result[0]
+
+#             # Handle ToVisit cells for visualization
+#             to_visit = result.get('ToVisit', [])
+#             for cell_str in to_visit:
+#                 match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
+#                 if match:
+#                     x, y = int(match.group(1)), int(match.group(2))
+#                     cell = self.grid[y][x]
+#                     if not cell.is_start() and not cell.is_dest():
+#                         cell.make_to_visit()
+#                         app.update_idletasks()
+#                         time.sleep(0.001)  # Short delay for visualization
+
+#             # Handle Visited cells for visualization
+#             visited = result.get('Visited', [])
+#             for cell_str in visited:
+#                 match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
+#                 if match:
+#                     x, y = int(match.group(1)), int(match.group(2))
+#                     cell = self.grid[y][x]
+#                     if not cell.is_start() and not cell.is_dest():
+#                         cell.make_visited()
+#                         app.update_idletasks()
+#                         time.sleep(0.001)  # Short delay for visualization
+
+#             # Check if the destination has been reached
+#             path = result.get('Path', [])
+#             if path:
+#                 for cell_str in path:
+#                     match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_str)
+#                     if match:
+#                         x, y = int(match.group(1)), int(match.group(2))
+#                         cell = self.grid[y][x]
+#                         if not cell.is_start() and not cell.is_dest():
+#                             cell.make_path()
+#                             app.update_idletasks()
+#                             time.sleep(0.01)  # Slightly longer delay for path visualization
+#                 solution_found = True
+#                 messagebox.showinfo("Path Found", f"Cells Discovered: {len(visited)}\nDistance to destination: {len(path)-1}")
+#                 break
+
+#             # Update the current cell to continue DFS from the stack’s top
+#             if to_visit:
+#                 current = to_visit[0]
