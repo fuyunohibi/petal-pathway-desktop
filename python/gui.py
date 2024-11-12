@@ -700,107 +700,97 @@ class CellGrid(tkinter.Canvas):
             messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
 
     # MAIN FUNCTION: Dijkstra's algorithm
-    def dfs(self):
-      self.unbind_click()
-      self.clear_prev_algo()
-      discovered = 0
+    def dijkstra(self):
+        self.unbind_click()
+        self.clear_prev_algo()
+        discovered = 0
 
-      try:
-          start_cell = self.grid[self.start[0]][self.start[1]]
-          dest_cell = self.grid[self.dest[0]][self.dest[1]]
-          start_pos = f"cell({start_cell.abs}, {start_cell.ord})"
-          dest_pos = f"cell({dest_cell.abs}, {dest_cell.ord})"
+        try:
+            # Get start and destination cells
+            start_cell = self.grid[self.start[0]][self.start[1]]
+            dest_cell = self.grid[self.dest[0]][self.dest[1]]
 
-          print(f"DFS Start Position: {start_pos}")
-          print(f"DFS Destination Position: {dest_pos}")
+            # Convert to Prolog coordinates
+            start_pos = f"({start_cell.abs}, {start_cell.ord})"
+            dest_pos = f"({dest_cell.abs}, {dest_cell.ord})"
 
-          # Reset Prolog knowledge base
-          self.prolog.retractall('grid_size(_, _)')
-          self.prolog.retractall('wall(_, _)')
-          self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
-          
-          # Add walls to Prolog database
-          for row in self.grid:
-              for cell in row:
-                  if cell.is_wall():
-                      self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
+            # Reset Prolog knowledge base
+            self.prolog.retractall('grid_size(_, _)')
+            self.prolog.retractall('wall(_, _)')
+            self.prolog.retractall('visited(_, _)')
+            self.prolog.retractall('to_visit(_, _)')
 
-          # Run DFS in Prolog and retrieve path
-          result = list(self.prolog.query(f"iddfs({start_pos}, {dest_pos}, Path, VisitedCells)"))
-          
-          # Debugging - Print Prolog query result
-          print("Prolog DFS Result:", result)
+            # Set grid dimensions in Prolog
+            self.prolog.assertz(f"grid_size({self.columnNumber}, {self.rowNumber})")
 
-          if result:  # Check if result is non-empty
-              result = result[0]
-              
-              # Extract 'Path' and 'VisitedCells'
-              path = result.get('Path', [])
-              visited_cells = result.get('VisitedCells', [])
+            # Add walls to Prolog database
+            for row in self.grid:
+                for cell in row:
+                    if cell.is_wall():
+                        self.prolog.assertz(f"wall({cell.abs}, {cell.ord})")
 
-              if not path:
-                  messagebox.showinfo("Path not found", "No solution exists")
-                  return
+            # Run Dijkstra's algorithm in Prolog with visualization feedback
+            query = f"dijkstra_with_visualization({start_pos}, {dest_pos}, Path, VisitedCells, 30)."
+            
+            # Execute query and retrieve results progressively
+            results = list(self.prolog.query(query))
+            
+            if results:  # Path found
+                result = results[0]
+                path = result['Path']
+                visited_cells = result['VisitedCells']
 
-              # Display visited cells in the GUI
-              for cell_pos in visited_cells:
-                  # Ensure cell_pos is in the correct format
-                  if isinstance(cell_pos, dict) and 'X' in cell_pos and 'Y' in cell_pos:
-                      x, y = cell_pos["X"], cell_pos["Y"]
-                  elif isinstance(cell_pos, str):
-                      match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
-                      if match:
-                          x, y = int(match.group(1)), int(match.group(2))
-                      else:
-                          print("Unexpected format for visited cell:", cell_pos)
-                          messagebox.showerror("Error", f"Visited cell format is incorrect: {cell_pos}")
-                          return
-                  else:
-                      print("Unexpected format for visited cell:", cell_pos)
-                      messagebox.showerror("Error", f"Visited cell format is incorrect: {cell_pos}")
-                      return
+                # Process each cell in VisitedCells
+                for cell_pos in visited_cells:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        cell = self.grid[y][x]
 
-                  # Mark the cell as visited in the GUI
-                  cell = self.grid[y][x]
-                  if not cell.is_start() and not cell.is_dest():
-                      cell.make_visited()
-                      self.update_idletasks()
-                      time.sleep(0.01)
-                  discovered += 1
+                        if not cell.is_start() and not cell.is_dest():
+                            # Mark cell as to be visited (pink)
+                            cell.make_to_visit()
+                            app.update_idletasks()
+                            time.sleep(0.01)
+                            
+                            # Mark cell as visited (orange)
+                            cell.make_visited()
+                        discovered += 1
 
-              # Display path in the GUI
-              for cell_pos in path:
-                  # Ensure cell_pos is in the correct format
-                  if isinstance(cell_pos, dict) and 'X' in cell_pos and 'Y' in cell_pos:
-                      x, y = cell_pos["X"], cell_pos["Y"]
-                  elif isinstance(cell_pos, str):
-                      match = re.match(r"cell\((\d+),\s*(\d+)\)", cell_pos)
-                      if match:
-                          x, y = int(match.group(1)), int(match.group(2))
-                      else:
-                          print("Unexpected format for path cell:", cell_pos)
-                          messagebox.showerror("Error", f"Path cell format is incorrect: {cell_pos}")
-                          return
-                  else:
-                      print("Unexpected format for path cell:", cell_pos)
-                      messagebox.showerror("Error", f"Path cell format is incorrect: {cell_pos}")
-                      return
+                # Visualize final path
+                prev_cell = start_cell
+                for cell_pos in path:
+                    pos_str = str(cell_pos).strip("'\" ,")
+                    coords = re.findall(r'\d+', pos_str)
+                    if len(coords) >= 2:
+                        x, y = int(coords[0]), int(coords[1])
+                        current_cell = self.grid[y][x]
+                        current_cell.prev = prev_cell
+                        if not current_cell.is_start() and not current_cell.is_dest():
+                            current_cell.make_path()
+                        prev_cell = current_cell
+                        app.update_idletasks()
+                        time.sleep(0.01)
 
-                  # Mark the cell as part of the path in the GUI
-                  cell = self.grid[y][x]
-                  if not cell.is_start() and not cell.is_dest():
-                      cell.make_path()
-                      self.update_idletasks()
-                      time.sleep(0.01)
+                # Show completion message
+                steps = len(path) - 1
+                messagebox.showinfo(
+                    "Path found",
+                    f"Cells Discovered: {discovered}\nDistance to destination: {steps}"
+                )
 
-              messagebox.showinfo("Path found", f"Cells Discovered: {discovered}\nDistance to destination: {len(path)-1}")
+            else:  # No path found
+                messagebox.showinfo("Path not found", "No solution exists")
 
-          else:
-              messagebox.showinfo("Path not found", "No solution exists")
+        except Exception as e:
+            print(f"Error during Dijkstra's algorithm: {e}")
+            messagebox.showerror("Error", f"Algorithm failed: {str(e)}")
 
-      except Exception as e:
-          print(f"Error during DFS algorithm: {e}")
-          messagebox.showerror("Error", f"DFS algorithm failed: {str(e)}")
+        finally:
+            # Ensure start and end points are correctly marked
+            self.grid[self.start[0]][self.start[1]].make_start()
+            self.grid[self.dest[0]][self.dest[1]].make_dest()
 
                         
 start_time = time.time()
